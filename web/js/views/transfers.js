@@ -132,7 +132,7 @@ function clubCard(c) {
 
   return `
     <section class="club-card" data-club="${esc(c.club.id)}">
-      <button class="club-head" style="--edge:${esc(c.club.colour)}">
+      <div class="club-head" style="--edge:${esc(c.club.colour)}" role="button" tabindex="0">
         ${crest(c.club)}
         <span class="ch-name">
           <b>${esc(c.club.name)}</b>
@@ -144,8 +144,9 @@ function clubCard(c) {
         </span>
         ${hasMoney ? `<span class="ch-net ${net > 0 ? 'pos' : 'neg'}">
           ${net > 0 ? '+' : '−'}${money(Math.abs(net))}<small>net</small></span>` : ''}
+        <button class="xi-btn" type="button" data-xi-btn="${esc(c.club.id)}">⚽ Probable XI</button>
         <span class="ch-caret">▾</span>
-      </button>
+      </div>
       <div class="club-body" hidden>
         ${column('In', c.in, 'in')}
         ${column('Out', c.out, 'out')}
@@ -179,18 +180,39 @@ function compactRow(t, dir) {
 }
 
 function wireAccordions(root) {
-  root.querySelectorAll('.club-head').forEach(h =>
-    h.addEventListener('click', () => {
+  // The header only ever toggles the In/Out list now - the probable XI has
+  // its own button and opens independently, instead of being forced open or
+  // closed alongside the transfer list every time.
+  root.querySelectorAll('.club-head').forEach(h => {
+    const toggleBody = () => {
       const body = h.nextElementSibling;
-      const xi = body.nextElementSibling;
       const opening = body.hidden;
       body.hidden = !opening;
-      if (xi) xi.hidden = !opening;
       h.classList.toggle('open', opening);
-      // Fetch the XI only when a card is actually opened - nobody wants 110
-      // lineup requests fired on page load.
-      if (opening && xi && !xi.dataset.loaded) loadXI(xi);
-    }));
+    };
+    h.addEventListener('click', e => {
+      if (e.target.closest('[data-xi-btn]')) return;
+      toggleBody();
+    });
+    h.addEventListener('keydown', e => {
+      if (e.target.closest('[data-xi-btn]')) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBody(); }
+    });
+  });
+
+  root.querySelectorAll('[data-xi-btn]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const xi = btn.closest('.club-card')?.querySelector('.club-xi');
+      if (!xi) return;
+      const opening = xi.hidden;
+      xi.hidden = !opening;
+      btn.classList.toggle('active', opening);
+      // Fetch the XI only the first time it is actually shown - nobody wants
+      // 110 lineup requests fired on page load.
+      if (opening && !xi.dataset.loaded) loadXI(xi);
+    });
+  });
 }
 
 async function loadXI(slot) {

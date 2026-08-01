@@ -548,6 +548,15 @@ tr.rel .rank::before { background: var(--live); }
   font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
 .ch-net.pos { color: var(--win); }
 .ch-net.neg { color: var(--live); }
+.xi-btn {
+  flex: none; font-size: 11.5px; font-weight: 700; white-space: nowrap;
+  padding: 6px 11px; border-radius: 20px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--line-2); color: var(--text-2);
+  transition: background .13s, border-color .13s, color .13s;
+}
+.xi-btn:hover { border-color: var(--accent); color: var(--accent); }
+.xi-btn.active { background: rgba(200,255,46,.14); border-color: var(--accent); color: var(--accent); }
+
 .ch-caret { color: var(--muted); transition: transform .18s; font-size: 12px; }
 .club-head.open .ch-caret { transform: rotate(180deg); }
 
@@ -1341,8 +1350,10 @@ a.sq-card:hover { background: var(--surface-3); }
   .tl-row { grid-template-columns: 1fr 38px 1fr; gap: 4px; }
   .tl-ev { font-size: 12.5px; }
 
-  .club-head { padding: 12px; gap: 10px; }
+  .club-head { padding: 12px; gap: 8px; flex-wrap: wrap; }
   .ch-mix { display: none; }
+  .xi-btn { font-size: 0; padding: 7px 9px; }
+  .xi-btn::before { content: "⚽"; font-size: 13px; }
   .tr-mini { grid-template-columns: 38px 1fr auto; }
 
   .team-hero { padding: 16px 14px; gap: 13px; }
