@@ -347,6 +347,49 @@ class CompositeProvider:
     def _squad_store(self) -> dict:
         return self._squads.load()
 
+    async def _full_roster(self, club_id: str) -> list[dict]:
+        """A club's squad, from both endpoints unioned.
+
+        `/players/squads` alone is incomplete - for Real Madrid it returned 39
+        players and omitted Endrick, Carvajal, Modric, Ceballos and Alaba,
+        while `/players?team=` had 51. Neither is a superset of the other:
+        the squad list carries shirt numbers and brand-new signings who have
+        not played yet, the season list carries everyone who actually
+        appeared. Merged, keyed on player id, squad-list fields winning where
+        both have a value.
+        """
+        api_id = TEAM_IDS[club_id]["api_id"]
+        squad = await af.squad(api_id)
+        by_id: dict[int, dict] = {p["id"]: p for p in squad if p.get("id")}
+
+        try:
+            club = CLUB_BY_ID.get(club_id)
+            season, _ = await self._season(club["league"]) if club else (None, None)
+            if season:
+                for p in await af.team_season_players(api_id, season):
+                    pid = p.get("id")
+                    if not pid:
+                        continue
+                    if pid in by_id:
+                        # Fill only what the squad list left blank.
+                        for k in ("position", "photo", "age"):
+                            if not by_id[pid].get(k) and p.get(k):
+                                by_id[pid][k] = p[k]
+                    else:
+                        by_id[pid] = {
+                            "id": pid, "name": p.get("name"),
+                            "photo": p.get("photo"), "age": p.get("age"),
+                            "number": None,
+                            "position": p.get("position"),
+                            "position_long": p.get("position"),
+                        }
+        except QuotaExceeded:
+            raise
+        except Exception:
+            pass  # squad list alone is still better than nothing
+
+        return list(by_id.values())
+
     async def sweep_squads(self, limit: int | None = None) -> dict:
         """Pull real squads so player search has something to search."""
         if not settings.is_live:
@@ -362,7 +405,7 @@ class CompositeProvider:
             if not quota.can_spend("core", 1):
                 break
             try:
-                players = await af.squad(TEAM_IDS[club_id]["api_id"])
+                players = await self._full_roster(club_id)
             except QuotaExceeded:
                 break
             except Exception as exc:
@@ -871,9 +914,44 @@ class CompositeProvider:
         except Exception:
             return False
 
+    def _latest_signing(self, player_id: int) -> dict | None:
+        """Where a player most recently moved TO, per the transfer store.
+
+        Only trusted for the current window - an older record would be stale
+        next to real appearance history.
+        """
+        since = window_start("season")
+        best = None
+        for row in self._merged_transfers(since):
+            if row["player"].get("id") != player_id:
+                continue
+            if best is None or (row.get("date") or "") > (best.get("date") or ""):
+                best = row
+        if not best:
+            return None
+        dest = best["to"]
+        club = CLUB_BY_ID.get(dest.get("id")) if dest.get("id") else None
+        if not club and not dest.get("name"):
+            return None
+        return {
+            "club": dest.get("id"),
+            "club_name": club["short"] if club else dest.get("name"),
+            "club_colour": club["colour"] if club else "#7a8699",
+            "club_logo": dest.get("logo"),
+        }
+
     async def _current_club(self, player_id: int) -> dict:
         """Most recent *club* for a player. National sides are skipped."""
         blank = {"club": None, "club_name": None, "club_colour": None}
+
+        # A completed transfer beats appearance history. /players/teams only
+        # lists seasons a player actually PLAYED, so between seasons a summer
+        # signing still reads as their old club - Cucurella showed as Chelsea
+        # for weeks after joining Real Madrid, because 2026-27 had not started.
+        signing = self._latest_signing(player_id)
+        if signing:
+            return signing
+
         try:
             teams = await af.player_teams(player_id)
         except Exception:
