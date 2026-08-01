@@ -134,7 +134,9 @@ async function fixturesPanel(ctx, lid) {
       const data = await api.leagueFixtures(lid, when);
       ctx.setPill(sourcePill(data));
       rows.innerHTML = data.matches?.length
-        ? data.matches.map(matchRow).join('')
+        ? notice(data.note)
+          + (data.season ? `<div class="season-tag">Season ${esc(data.season)}</div>` : '')
+          + data.matches.map(matchRow).join('')
         : emptyState('🗓', when === 'next' ? 'No upcoming fixtures' : 'No results yet');
     } catch (err) {
       rows.innerHTML = emptyState('⚠', 'Could not load fixtures', err.message);

@@ -784,10 +784,19 @@ class CompositeProvider:
             return {"matches": [], "source": "unavailable"}
         season = current_season()
         rows = await af.league_fixtures(meta["api_id"], season, when, count)
-        if not rows and when == "next":
-            rows = await af.league_fixtures(meta["api_id"], season - 1, when, count)
+        # Between seasons there are no results yet (and sometimes no fixtures
+        # published), so fall back to the last completed campaign either way.
+        fallback_season = None
+        if not rows:
+            fallback_season = season - 1
+            rows = await af.league_fixtures(meta["api_id"], fallback_season, when, count)
         return {"matches": _tag(rows, "apifootball", False),
-                "source": "apifootball", "simulated": False, "when": when}
+                "source": "apifootball", "simulated": False, "when": when,
+                "season": _season_label(fallback_season or season),
+                "note": (f"The {_season_label(season)} season has no "
+                         f"{'results' if when == 'last' else 'fixtures'} yet - "
+                         f"showing {_season_label(fallback_season)}."
+                         if fallback_season else None)}
 
 
 def window_start(window: str = "season") -> str:
