@@ -1,5 +1,6 @@
 // Shared render pieces used by more than one view.
 import { crest, esc, kickoffTime } from './util.js';
+import { pitch } from './pitch.js';
 
 const TODAY = new Date().toDateString();
 
@@ -114,4 +115,43 @@ export function sourcePill(payload) {
 export function formStrip(form = '') {
   if (!form) return '<span style="color:var(--muted)">—</span>';
   return `<span class="form">${[...form].map(c => `<i class="${c}">${c}</i>`).join('')}</span>`;
+}
+
+/** Probable-XI pitch + rest-of-squad list. Shared by the Transfers club
+ *  accordion and the club page, since both hang off the same /lineup call. */
+export function pitchBlock(d) {
+  const tracked = d.season != null;
+  return `
+    <div class="xi-head">
+      <b>Probable XI</b>
+      <span class="xi-note">${tracked ? esc(d.season) + ' data · ' : ''}${esc(d.basis)}</span>
+    </div>
+    ${pitch(d.xi, {
+      colour: d.club.colour,
+      formation: d.formation,
+      title: d.club.short,
+      subtitle: tracked ? `${d.new_signings} signings this window` : '',
+      stat: p => p.starts || null,
+      statLabel: tracked ? 'number shown is starts last season' : '',
+    })}
+
+    ${d.squad?.length ? `<div class="xi-sub">
+      <h4>Rest of squad <span class="xi-num">${d.squad.length}</span>
+        <span class="xi-legend">${d.xi.length} in XI · ${d.squad_total} total${
+          d.new_signings ? ` · ★ ${d.new_signings} signed` : ''}</span></h4>
+      <div class="bench-list">${d.squad.map(p => `
+        <a class="bench-chip ${p.new_signing ? 'is-new' : ''}${
+             p.in_squad === false ? ' unreg' : ''}${p.unavailable ? ' out' : ''}"
+           href="#/player/${esc(p.id)}"
+           title="${p.unavailable ? esc(p.unavailable)
+             : p.in_squad === false ? 'Signed, but not yet in the registered squad'
+             : esc(p.name || '')}">${p.new_signing ? '★ ' : ''}${
+          p.starts != null ? `<b>${p.starts}</b>` : ''}${esc(p.name)}${
+          p.in_squad === false ? ' <i>unregistered</i>'
+          : p.unavailable ? ` <i>${esc(p.unavailable)}</i>` : ''}</a>`).join('')}</div>
+    </div>` : ''}
+
+    <p class="xi-caveat">Derived from the club's ${tracked
+      ? "most-used shape, its most recent XI and who actually starts"
+      : "most recently published starting lineup"} — not an official teamsheet.</p>`;
 }

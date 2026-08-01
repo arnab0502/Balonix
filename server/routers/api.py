@@ -242,8 +242,25 @@ async def squads_sync(limit: int = Query(None, ge=1, le=500)):
     return await provider.sweep_squads(limit)
 
 
+def _generic_api_id(team_id: str) -> int | None:
+    """`api-<id>` marks a club outside the tracked registry (typically a
+    Champions League qualifying/group opponent from a league we don't
+    otherwise cover) - see apifootball._side()."""
+    if team_id.startswith("api-") and team_id[4:].isdigit():
+        return int(team_id[4:])
+    return None
+
+
 @router.get("/team/{team_id}")
 async def team(team_id: str):
+    api_id = _generic_api_id(team_id)
+    if api_id is not None:
+        if not hasattr(provider, "team_generic"):
+            raise HTTPException(404, "unknown team")
+        data = await provider.team_generic(api_id)
+        if not data:
+            raise HTTPException(404, "unknown team")
+        return data
     data = await provider.team(team_id)
     if not data:
         raise HTTPException(404, "unknown team")
@@ -253,6 +270,11 @@ async def team(team_id: str):
 @router.get("/team/{team_id}/lineup")
 async def team_lineup(team_id: str):
     """Probable XI after the window - derived, clearly not a teamsheet."""
+    api_id = _generic_api_id(team_id)
+    if api_id is not None:
+        if not hasattr(provider, "probable_xi_generic"):
+            return {"available": False, "reason": "needs a live provider"}
+        return await provider.probable_xi_generic(api_id)
     if team_id not in CLUB_BY_ID:
         raise HTTPException(404, "unknown club")
     if not hasattr(provider, "probable_xi"):

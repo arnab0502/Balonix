@@ -637,6 +637,42 @@ class CompositeProvider:
             data["transfers_source"] = "simulated"
         return data
 
+    async def team_generic(self, api_id: int) -> dict | None:
+        """Club page for a team outside the tracked registry - mostly
+        Champions League qualifying/group opponents from leagues we do not
+        otherwise cover. There is no local record for these clubs, so this
+        skips standings, tickets and the transfer sweep and sticks to what
+        the API can answer directly: identity, real fixtures and squad."""
+        if not settings.is_live:
+            return None
+        info = await af.team_info(api_id)
+        if not info.get("name"):
+            return None
+
+        upcoming, recent, roster = await asyncio.gather(
+            af.team_fixtures(api_id, "next", 8),
+            af.team_fixtures(api_id, "last", 8),
+            af.squad(api_id),
+        )
+        team_key = f"api-{api_id}"
+        return {
+            "club": {"id": team_key, "name": info["name"], "short": info["name"],
+                     "tla": info["name"][:3].upper(), "colour": "#7a8699",
+                     "logo": info.get("logo"), "stadium": info.get("stadium") or ""},
+            "league": None,
+            "standing": None,
+            "form": None,
+            "tickets": None,
+            "upcoming": _tag(upcoming, "apifootball", False),
+            "recent": _tag(recent, "apifootball", False),
+            "fixtures_source": "apifootball",
+            "squad": [{**p, "club": team_key} for p in roster],
+            "squad_source": "apifootball" if roster else "simulated",
+            "transfers": [],
+            "transfers_source": "apifootball",
+            "generic": True,
+        }
+
     # ------------------------------------------------------------ probable XI
     async def probable_xi(self, team_id: str) -> dict:
         """A likely starting XI, grounded in who actually starts.
@@ -886,6 +922,64 @@ class CompositeProvider:
             "arrivals": arrivals,
             "basis": ("most-used shape and recent XI" if shape
                       else "appearances only - no recent lineup published"),
+        }
+
+    async def probable_xi_generic(self, api_id: int) -> dict:
+        """Same idea as probable_xi(), scaled down for a club outside the
+        tracked registry: there is no local season, no synced squad snapshot
+        and no transfer sweep to rank signings against, so this leans on the
+        two things the API can give for any club - the current squad and its
+        most recently published starting XI."""
+        if not settings.is_live:
+            return {"available": False, "reason": "no data for this club"}
+
+        info = await af.team_info(api_id)
+        if not info.get("name"):
+            return {"available": False, "reason": "unknown club"}
+
+        roster = await af.squad(api_id)
+        if not roster:
+            return {"available": False, "reason": "no squad data for this club"}
+
+        shape = await af.recent_lineup_shape(api_id, None, None, count=6)
+        by_id = {p["id"]: p for p in roster if p.get("id")}
+
+        xi: list[dict] = []
+        picked: set[int] = set()
+        if shape and shape.get("slots"):
+            for slot in shape["slots"]:
+                pid = slot.get("id")
+                base = by_id.get(pid, {})
+                xi.append({
+                    "id": pid, "name": base.get("name") or slot.get("name"),
+                    "photo": base.get("photo"), "position": base.get("position"),
+                    "number": base.get("number"),
+                    "grid": slot.get("grid"), "slot_pos": slot.get("pos"),
+                    "starts": None, "basis": "recent lineup",
+                    "replaces": None, "new_signing": False,
+                })
+                if pid:
+                    picked.add(pid)
+
+        rest = [{**p, "starts": None, "new_signing": False, "in_squad": True,
+                 "unavailable": None}
+                for p in roster if p.get("id") not in picked]
+
+        return {
+            "available": True,
+            "club": {"id": f"api-{api_id}", "name": info["name"], "short": info["name"],
+                     "colour": "#7a8699", "logo": info.get("logo")},
+            "season": None,
+            "formation": shape.get("formation") if shape else None,
+            "formation_usage": [],
+            "xi": xi,
+            "squad": rest,
+            "squad_total": len(xi) + len(rest),
+            "unavailable_count": 0,
+            "new_signings": 0,
+            "arrivals": [],
+            "basis": ("most recently published lineup" if shape
+                      else "squad list only - no recent lineup published"),
         }
 
     async def search(self, query: str) -> dict:

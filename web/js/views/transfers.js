@@ -1,7 +1,6 @@
 // Transfer feed - grouped by club by default, with search.
 import { api, bustCache } from '../api.js';
-import { sourcePill } from '../components.js';
-import { pitch } from '../pitch.js';
+import { pitchBlock, sourcePill } from '../components.js';
 import { $, crest, emptyState, esc, money, notice, relTime, shortDate, skeleton } from '../util.js';
 
 const state = { league: '', kind: '', group: 'club', q: '', window: 'season' };
@@ -226,42 +225,6 @@ async function loadXI(slot) {
     slot.innerHTML = `<div class="xi-loading">Could not build a lineup — ${esc(err.message)}</div>`;
   }
 }
-
-/* ------------------------------------------------------ probable XI */
-function pitchBlock(d) {
-  return `
-    <div class="xi-head">
-      <b>Probable XI</b>
-      <span class="xi-note">${esc(d.season)} data · ${esc(d.basis)}</span>
-    </div>
-    ${pitch(d.xi, {
-      colour: d.club.colour,
-      formation: d.formation,
-      title: d.club.short,
-      subtitle: `${d.new_signings} signings this window`,
-      stat: p => p.starts || null,
-      statLabel: 'number shown is starts last season',
-    })}
-
-    ${d.squad?.length ? `<div class="xi-sub">
-      <h4>Rest of squad <span class="xi-num">${d.squad.length}</span>
-        <span class="xi-legend">${d.xi.length} in XI · ${d.squad_total} total${
-          d.new_signings ? ` · ★ ${d.new_signings} signed` : ''}</span></h4>
-      <div class="bench-list">${d.squad.map(p => `
-        <a class="bench-chip ${p.new_signing ? 'is-new' : ''}${
-             p.in_squad === false ? ' unreg' : ''}${p.unavailable ? ' out' : ''}"
-           href="#/player/${esc(p.id)}"
-           title="${p.unavailable ? esc(p.unavailable)
-             : p.in_squad === false ? 'Signed, but not yet in the registered squad'
-             : esc(p.name || '')}">${p.new_signing ? '★ ' : ''}<b>${p.starts ?? 0}</b>${esc(p.name)}${
-          p.in_squad === false ? ' <i>unregistered</i>'
-          : p.unavailable ? ` <i>${esc(p.unavailable)}</i>` : ''}</a>`).join('')}</div>
-    </div>` : ''}
-
-    <p class="xi-caveat">Derived from the club's most-used shape, its most recent
-      XI and who actually starts — not an official teamsheet.</p>`;
-}
-
 
 /* ----------------------------------------------------------------- latest */
 function kindLabel(k) {

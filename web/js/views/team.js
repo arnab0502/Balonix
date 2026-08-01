@@ -1,6 +1,6 @@
 // Club page: identity, league position, fixtures, squad, transfers, tickets.
 import { api } from '../api.js';
-import { formStrip, matchRow } from '../components.js';
+import { formStrip, matchRow, pitchBlock } from '../components.js';
 import { $, crest, emptyState, esc, money, notice, shortDate, skeleton } from '../util.js';
 
 export async function renderTeam(ctx, params) {
@@ -63,7 +63,8 @@ export async function renderTeam(ctx, params) {
     <div class="tabs" id="tm-tabs">
       <div class="tab active" data-tab="results">Results</div>
       <div class="tab" data-tab="squad">Squad</div>
-      <div class="tab" data-tab="transfers">Transfers</div>
+      <div class="tab" data-tab="xi">Probable XI</div>
+      ${d.generic ? '' : '<div class="tab" data-tab="transfers">Transfers</div>'}
     </div>
     <div id="tm-body"></div>`;
 
@@ -76,11 +77,20 @@ export async function renderTeam(ctx, params) {
   };
   const body = $('#tm-body');
   body.innerHTML = panels.results();
+  let xiHTML = null;
 
-  $('#tm-tabs').addEventListener('click', e => {
+  $('#tm-tabs').addEventListener('click', async e => {
     const tab = e.target.closest('.tab'); if (!tab) return;
     $('#tm-tabs').querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     tab.classList.add('active');
+    if (tab.dataset.tab === 'xi') {
+      if (xiHTML == null) {
+        body.innerHTML = `<div class="xi-loading">Working out the probable XI…</div>`;
+        xiHTML = await loadXI(params.id);
+      }
+      body.innerHTML = xiHTML;
+      return;
+    }
     body.innerHTML = panels[tab.dataset.tab]();
   });
 
@@ -88,6 +98,16 @@ export async function renderTeam(ctx, params) {
     const row = e.target.closest('.match');
     if (row && !e.target.closest('[data-stop]')) location.hash = `#/match/${row.dataset.match}`;
   });
+}
+
+async function loadXI(teamId) {
+  try {
+    const d = await api.lineup(teamId);
+    return d.available ? pitchBlock(d)
+      : emptyState('⚽', 'No probable XI', d.reason || 'Not enough data for this club.');
+  } catch (err) {
+    return emptyState('⚠', 'Could not build a lineup', err.message);
+  }
 }
 
 function squadPanel(d) {
