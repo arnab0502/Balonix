@@ -54,10 +54,12 @@ function hero(d) {
     const when = new Date(next.kickoff);
     const days = Math.round((when - new Date()) / 86400000);
     return `
-      <section class="hero" style="--accent-league:${esc(next.league_accent || '#c8ff2e')}">
+      <a class="hero hero-clickable" href="#/match/${esc(next.id)}"
+         style="--accent-league:${esc(next.league_accent || '#c8ff2e')}">
         <div class="hero-glow"></div>
         <div class="hero-inner">
-          <div class="hero-eyebrow">Next up · ${esc(next.league_name || '')}</div>
+          <div class="hero-eyebrow">Next up · ${esc(next.league_name || '')}${
+            days > 0 ? ` · ${days} day${days === 1 ? '' : 's'} away` : ''}</div>
           <div class="hero-fixture">
             <div class="hf-side">${crest(next.home)}<span>${esc(next.home.short)}</span></div>
             <div class="hf-mid">
@@ -67,14 +69,8 @@ function hero(d) {
             </div>
             <div class="hf-side">${crest(next.away)}<span>${esc(next.away.short)}</span></div>
           </div>
-          <div class="hero-actions">
-            ${days > 0 ? `<span class="hero-count">${days} day${days === 1 ? '' : 's'} away</span>` : ''}
-            ${next.tickets ? `<a class="btn" href="${esc(next.tickets.url)}" target="_blank"
-                 rel="noopener noreferrer">🎟 Tickets</a>` : ''}
-            <a class="btn ghost" href="#/matches?day=${esc((next.kickoff || '').slice(0, 10))}">See the card →</a>
-          </div>
         </div>
-      </section>`;
+      </a>`;
   }
 
   return `

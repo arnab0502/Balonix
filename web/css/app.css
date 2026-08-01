@@ -764,6 +764,7 @@ a.sq-card:hover { background: var(--surface-3); }
 .home-skel { padding-top: 8px; }
 
 .hero {
+  display: block;
   position: relative; overflow: hidden;
   border: 1px solid var(--line); border-radius: var(--r-lg);
   padding: clamp(24px, 4vw, 44px) clamp(20px, 4vw, 40px);
@@ -774,6 +775,8 @@ a.sq-card:hover { background: var(--surface-3); }
     linear-gradient(155deg, var(--surface-2) 0%, var(--surface) 60%, var(--bg-2) 100%);
   isolation: isolate;
 }
+.hero-clickable { transition: border-color .14s, transform .14s; }
+.hero-clickable:hover { border-color: var(--accent-league, var(--accent)); transform: translateY(-2px); }
 /* faint pitch stripes, barely there */
 .hero::before {
   content: ""; position: absolute; inset: 0; z-index: -1; opacity: .5;
@@ -804,8 +807,6 @@ a.sq-card:hover { background: var(--surface-3); }
 .hero-sub { color: var(--text-2); font-size: clamp(14px, 1.6vw, 16px);
   max-width: 46ch; line-height: 1.55; margin-bottom: 22px; }
 .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.hero-count { font-size: 12px; font-weight: 700; color: var(--muted);
-  letter-spacing: .04em; text-transform: uppercase; }
 
 /* next-fixture hero */
 .hero-fixture {
