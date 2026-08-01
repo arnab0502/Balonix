@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auth import basic_auth_middleware
@@ -72,10 +72,35 @@ app.mount("/static", RevalidatingStatics(directory=WEB_DIR), name="static")
 _NO_CACHE = {"Cache-Control": "no-cache, must-revalidate"}
 
 
+def _build_id() -> str:
+    """Fingerprint of the frontend, from every asset's size and mtime.
+
+    Appended to the script and stylesheet URLs. `Cache-Control: no-cache` only
+    helps if the browser asks; anything it cached *before* those headers
+    existed is served from disk without a request. A changing URL is the only
+    thing that reliably breaks that, and it makes every future deploy pick up
+    instantly too.
+    """
+    import hashlib
+
+    h = hashlib.sha256()
+    for path in sorted(WEB_DIR.rglob("*")):
+        if path.suffix in (".js", ".css", ".html") and path.is_file():
+            st = path.stat()
+            h.update(f"{path.name}:{st.st_size}:{int(st.st_mtime)}".encode())
+    return h.hexdigest()[:10]
+
+
+BUILD = _build_id()
+
+
 @app.get("/{full_path:path}")
 async def spa(full_path: str):
     """Serve the single-page app for every non-API route."""
     candidate = (WEB_DIR / full_path).resolve()
     if full_path and candidate.is_file() and WEB_DIR in candidate.parents:
         return FileResponse(candidate, headers=_NO_CACHE)
-    return FileResponse(WEB_DIR / "index.html", headers=_NO_CACHE)
+
+    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    html = html.replace("__BUILD__", BUILD)
+    return HTMLResponse(html, headers=_NO_CACHE)

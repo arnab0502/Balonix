@@ -21,7 +21,6 @@ export async function renderHome(ctx) {
 
   root.innerHTML = `
     ${hero(d)}
-    ${statRail(d)}
     <div class="home-grid">
       <div class="home-col">
         ${rumourPanel(d)}
@@ -101,21 +100,6 @@ function liveTile(m) {
       <span class="lt-row"><span>${esc(m.home.short)}</span><b>${m.home.score}</b></span>
       <span class="lt-row"><span>${esc(m.away.short)}</span><b>${m.away.score}</b></span>
     </a>`;
-}
-
-/* -------------------------------------------------------------- stat rail */
-function statRail(d) {
-  const c = d.counts || {};
-  const tiles = [
-    ['Competitions', c.leagues, '#c8ff2e'],
-    ['Clubs tracked', c.clubs, '#3d8bff'],
-    ['Transfers this window', d.transfer_total, '#ff6b3d'],
-    ['Episodes', c.episodes, '#c47bff'],
-  ];
-  return `<div class="stat-rail">${tiles.map(([label, value, colour]) => `
-    <div class="sr-tile" style="--c:${colour}">
-      <b>${esc(String(value ?? '—'))}</b><span>${esc(label)}</span>
-    </div>`).join('')}</div>`;
 }
 
 /* ----------------------------------------------------------------- panels */

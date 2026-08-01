@@ -1,4 +1,6 @@
 // Router + app shell.
+// Asset URLs carry a ?v= build id; ES module imports inherit it from
+// the importing URL, so the whole graph busts together.
 import { api } from './api.js';
 import { $, $$, crest, esc, installCrestFallback } from './util.js';
 import { renderHome } from './views/home.js';
