@@ -199,6 +199,45 @@ The home page leads with the dedicated desks and falls back to general news.
 
 ---
 
+## Probable XI
+
+Expand a club card in **Transfers** and it builds a likely XI on a pitch,
+lazily (nobody wants 110 lineup requests on page load).
+
+Four real signals, no guessing:
+
+1. **Current squad** from `/players/squads` — the roster must be today's, not
+   last season's appearance list
+2. **Most-used formation** from `/teams/statistics`
+3. **Grid slots** from the club's most recent XI in that shape, so players sit
+   where they actually play
+4. **Who is unavailable**, and who arrived this window
+
+New signings are ranked on what they did at their **previous** club, so a
+summer arrival can displace an incumbent. Anyone still unranked is listed
+separately as an arrival with no minutes yet.
+
+### Four bugs this took
+
+- **Slot-by-slot filling scrambled the team.** The highest starter grabbed the
+  first vacant slot, putting Shaw at right-back and dropping Bruno Fernandes.
+  Now each position band is ranked first, then players are seated, preferring
+  their own previous slot.
+- **`/injuries?season=` returns the whole season's history**, so 19 Man United
+  players were marked unavailable. Scoped to the latest fixture.
+- **New signings were invisible.** The pool came from last season's stats *for
+  this club*, so Tonali — a Newcastle player last season — did not exist at
+  Spurs. Fixed by making the current squad the roster.
+- **`Attacker` bucketed as a midfielder.** The lineups endpoint says `G/D/M/F`,
+  the players endpoint says `Goalkeeper/Defender/Midfielder/Attacker`; taking
+  the first letter sent every forward to midfield and left the striker slot to
+  a youth player on zero starts.
+
+Starts are only credited from competitions we cover, so a Championship keeper
+on 41 games does not outrank a Premier League starter.
+
+---
+
 ## Player career stats
 
 The **By competition** tab groups a player's whole career by tournament, with

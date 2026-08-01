@@ -41,6 +41,8 @@ except (OSError, ValueError):
     TEAM_IDS = {}
 
 API_ID_TO_CLUB = {v["api_id"]: k for k, v in TEAM_IDS.items()}
+# Competitions whose minutes we treat as comparable when ranking a signing.
+_COVERED_IDS = {lg["api_id"] for lg in LEAGUES} | {3, 848}   # + Europa, Conference
 
 
 def _slug(text: str | None) -> str:
@@ -575,7 +577,62 @@ class CompositeProvider:
         meta = LEAGUE_BY_ID[club["league"]]
         season, _ = await self._season(club["league"])
 
-        players = await af.team_season_players(api_id, season)
+        # The roster must be the CURRENT squad, not last season's appearance
+        # list: a summer signing has no record at this club yet, so ranking
+        # off that list alone made Tonali invisible at Spurs.
+        squad_entry = self._squad_store().get("clubs", {}).get(team_id) or {}
+        roster = squad_entry.get("players") or []
+
+        stats_here = {p["id"]: p for p in await af.team_season_players(api_id, season)}
+
+        # Who arrived this window, and where from.
+        tstore = self._transfers.load().get("clubs", {}).get(team_id) or {}
+        since = window_start("season")
+        arrivals_by_id: dict[int, dict] = {}
+        for t in tstore.get("rows", []):
+            pid = t["player"].get("id")
+            if pid and t.get("date", "") >= since and t["to"].get("id") == team_id:
+                arrivals_by_id.setdefault(pid, t)
+
+        players: list[dict] = []
+        for r in roster:
+            pid = r.get("id")
+            if not pid:
+                continue
+            here = stats_here.get(pid)
+            if here:
+                players.append({**here, "name": r.get("name") or here.get("name"),
+                                "photo": r.get("photo") or here.get("photo"),
+                                "position": here.get("position") or r.get("position"),
+                                "from_elsewhere": None})
+                continue
+            # No record at this club. If they just signed, rank them on what
+            # they did at their previous club instead of dropping them.
+            elsewhere = None
+            if pid in arrivals_by_id and len(arrivals_by_id) <= 30:
+                elsewhere = await af.player_season_best(pid, season)
+                # A Championship regular outranking a Premier League starter is
+                # not a useful signal, so only credit starts from competitions
+                # we cover.
+                if elsewhere and elsewhere.get("league_api_id") not in _COVERED_IDS:
+                    elsewhere = {**elsewhere, "starts": 0, "unproven": True}
+            players.append({
+                "id": pid, "name": r.get("name"), "photo": r.get("photo"),
+                "position": (elsewhere or {}).get("position") or r.get("position"),
+                "starts": (elsewhere or {}).get("starts") or 0,
+                "apps": (elsewhere or {}).get("apps") or 0,
+                "minutes": (elsewhere or {}).get("minutes") or 0,
+                "rating": (elsewhere or {}).get("rating"),
+                "goals": (elsewhere or {}).get("goals") or 0,
+                "assists": (elsewhere or {}).get("assists") or 0,
+                "from_elsewhere": (elsewhere or {}).get("at"),
+                "unproven": bool((elsewhere or {}).get("unproven")),
+            })
+
+        # Anyone with a record here but no longer in the squad has left.
+        players.sort(key=lambda r: (-(r["starts"] or 0), -(r["minutes"] or 0)))
+        if not players:
+            players = list(stats_here.values())
         if not players:
             return {"available": False, "reason": "no squad data for this season"}
 
@@ -598,10 +655,7 @@ class CompositeProvider:
             pools.get(_pos_bucket(p["position"]), pools["M"]).append(p)
 
         # New arrivals since the window opened, so they can be badged.
-        entry = self._transfers.load().get("clubs", {}).get(team_id) or {}
-        since = window_start("season")
-        new_ids = {t["player"].get("id") for t in entry.get("rows", [])
-                   if t.get("date", "") >= since and t["to"].get("id") == team_id}
+        new_ids = set(arrivals_by_id)
 
         picked: set[int] = set()
 
@@ -625,35 +679,55 @@ class CompositeProvider:
         xi: list[dict] = []
         if shape and shape.get("slots"):
             slots = shape["slots"]
-            # Pass 1: everyone who held a slot and is still available keeps
-            # THEIR OWN slot. Doing this greedily in one pass let the highest
-            # starter grab the first vacant slot, which put Shaw at right-back
-            # and pushed Bruno Fernandes out of the team entirely.
-            assigned: dict[int, dict] = {}
+            # Fill each position band with the best available players, then
+            # seat them. Simply letting whoever held a slot keep it meant a
+            # 31-start signing sat behind a 14-start incumbent; ranking the
+            # band first and preferring a player's own slot second gives both
+            # the right personnel and the right shape.
+            by_band: dict[str, list[int]] = {}
             for i, slot in enumerate(slots):
-                prev = by_id.get(slot.get("id"))
-                if prev and prev["id"] not in injured and prev["id"] not in picked:
-                    picked.add(prev["id"])
-                    assigned[i] = {**prev, "basis": "held", "replaces": None}
+                by_band.setdefault(_pos_bucket(slot.get("pos")), []).append(i)
 
-            # Pass 2: fill what is left, position band by position band.
-            for i, slot in enumerate(slots):
-                if i in assigned:
-                    continue
-                bucket = _pos_bucket(slot.get("pos"))
-                pick = take(bucket)
-                if not pick:
-                    continue
-                prev = by_id.get(slot.get("id"))
-                assigned[i] = {**pick, "basis": "promoted",
-                               "replaces": (prev or {}).get("name") or slot.get("name")}
+            assigned: dict[int, dict] = {}
+            for band, idxs in by_band.items():
+                pool = [p for p in pools.get(band, []) if p["id"] not in picked]
+                chosen = pool[:len(idxs)]
+                # Short of bodies in this band (every forward injured, say):
+                # top up from whoever is left.
+                if len(chosen) < len(idxs):
+                    spare = [p for other in ("F", "M", "D", "G")
+                             for p in pools.get(other, [])
+                             if p["id"] not in picked and p not in chosen]
+                    chosen += spare[:len(idxs) - len(chosen)]
+                for p in chosen:
+                    picked.add(p["id"])
+
+                free = list(idxs)
+                seated: dict[int, dict] = {}
+                # A player who held one of these slots keeps it.
+                for p in chosen:
+                    for i in list(free):
+                        if slots[i].get("id") == p["id"]:
+                            seated[i] = p
+                            free.remove(i)
+                            break
+                for p in chosen:
+                    if p in seated.values():
+                        continue
+                    if not free:
+                        break
+                    seated[free.pop(0)] = p
+                assigned.update(seated)
 
             for i, slot in enumerate(slots):
                 pick = assigned.get(i)
                 if not pick:
                     continue
+                held = slot.get("id") == pick["id"]
                 xi.append({**pick, "grid": slot.get("grid"),
                            "slot_pos": slot.get("pos"),
+                           "basis": "held" if held else "promoted",
+                           "replaces": None if held else slot.get("name"),
                            "new_signing": pick["id"] in new_ids})
             formation = shape.get("formation") or formation
         else:
@@ -665,11 +739,18 @@ class CompositeProvider:
                                    "basis": "starts", "replaces": None,
                                    "new_signing": pick["id"] in new_ids})
 
-        # Signings with no minutes for this club yet cannot be ranked on
-        # starts, so surface them separately instead of guessing.
-        arrivals = [{**by_id[pid], "new_signing": True}
-                    for pid in new_ids
-                    if pid in by_id and by_id[pid]["starts"] == 0][:8]
+        # Every arrival in the current squad, with where they came from.
+        by_pid = {p["id"]: p for p in players}
+        arrivals = []
+        for pid, t in arrivals_by_id.items():
+            p = by_pid.get(pid)
+            if not p:
+                continue
+            arrivals.append({**p, "new_signing": True,
+                             "from_club": t["from"].get("name"),
+                             "signed": t.get("date"),
+                             "in_xi": pid in picked})
+        arrivals.sort(key=lambda a: (a.get("signed") or ""), reverse=True)
 
         bench = [{**p, "new_signing": p["id"] in new_ids}
                  for p in players if p["id"] not in picked and p["id"] not in injured][:12]
@@ -980,12 +1061,21 @@ def _h2h_summary(rows: list[dict], home_api_id: int | None) -> dict:
             "lost": lost, "gf": gf, "ga": ga}
 
 
+# Lineups say G/D/M/F; the players endpoint says Goalkeeper/Defender/
+# Midfielder/Attacker. Taking the first letter silently turned every
+# "Attacker" into a midfielder and left the striker slot to youth players.
+_POS_WORDS = {
+    "goalkeeper": "G", "keeper": "G", "gk": "G", "g": "G",
+    "defender": "D", "defence": "D", "d": "D",
+    "midfielder": "M", "midfield": "M", "m": "M",
+    "attacker": "F", "forward": "F", "striker": "F", "f": "F",
+}
+
+
 def _pos_bucket(pos: str | None) -> str:
-    """API-Football gives only G/D/M/F (or the long form)."""
     if not pos:
         return "M"
-    first = pos.strip()[0].upper()
-    return first if first in ("G", "D", "M", "F") else "M"
+    return _POS_WORDS.get(pos.strip().lower(), "M")
 
 
 def _season_label(year: int) -> str:

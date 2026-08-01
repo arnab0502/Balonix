@@ -723,6 +723,31 @@ async def team_season_players(api_team_id: int, season: int) -> list[dict]:
     return out
 
 
+async def player_season_best(player_id: int, season: int) -> dict | None:
+    """A player's best competition record in a season, at whatever club.
+
+    Lets a new signing be ranked on what they did elsewhere - Tonali's
+    Newcastle season is the only evidence we have of whether he starts.
+    """
+    try:
+        rows = await player_stats(player_id, season)
+    except Exception:
+        return None
+    if not rows:
+        return None
+    best = max(rows, key=lambda r: (r.get("apps") or 0))
+    return {"league_api_id": best.get("league_api_id"),
+            "league": best.get("league"),
+            "starts": best.get("lineups") or best.get("apps") or 0,
+            "apps": best.get("apps") or 0,
+            "minutes": best.get("minutes") or 0,
+            "position": best.get("position"),
+            "rating": best.get("rating"),
+            "goals": best.get("goals") or 0,
+            "assists": best.get("assists") or 0,
+            "at": best.get("team")}
+
+
 async def team_statistics(api_team_id: int, league_api_id: int, season: int) -> dict:
     async def fetch():
         return await client.get("/teams/statistics", "core", team=api_team_id,
@@ -909,6 +934,7 @@ async def player_stats(player_id: int, season: int) -> list[dict]:
         out.append({
             "league": league.get("name"),
             "league_api_id": league.get("id"),
+            "lineups": games.get("lineups") or 0,
             "league_logo": league.get("logo"),
             "country": league.get("country"),
             "team": team.get("name"),
