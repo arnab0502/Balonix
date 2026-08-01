@@ -3,7 +3,8 @@
 Everything about football in one place: a FotMob-style live-score app, a
 transfer feed, and a direct link to the official box office for every match.
 
-Covers the **big five plus the Indian Super League** — 110 clubs.
+Covers the **Champions League, the big five and the Indian Super League** —
+110 domestic clubs.
 
 ```bash
 ./run.sh          # then open http://127.0.0.1:8000
@@ -24,6 +25,8 @@ No Node, no build step. FastAPI serves a vanilla-JS single-page app.
 | **Clubs** | Squad, results, upcoming fixtures, recent business, ticket link |
 | **Tickets** | Every fixture links to the **home club's own box office** — never a resale site |
 | **Players** | Profile, per-competition season stats, career clubs, transfer history |
+| **Home** | Adaptive hero (live scores, else the next real fixture), stat rail, rumour mill, latest transfers, league leaders, newest episodes |
+| **Rumours** | Transfer talk aggregated from BBC Gossip, Guardian Transfers, Sky, BBC, Guardian and 90min — filterable by source, searchable, club-tagged |
 | **Search** | Clubs, players, competitions — player names open the player page |
 | **Podcast** | Your YouTube channel's episodes, searchable, with an inline player |
 
@@ -170,6 +173,47 @@ If fees matter to you, Transfermarkt is the source that has them. Both public
 disabled), but `server/providers/` is a clean interface for slotting in a
 self-hosted one — the transfer merge already prefers whichever record carries
 a fee.
+
+---
+
+## Rumour mill
+
+`server/providers/news.py` aggregates public RSS feeds — **no API key, no
+quota**. API-Football only carries completed moves, so rumours have to come
+from journalism.
+
+| Source | Tier | Notes |
+|---|---|---|
+| BBC Gossip | 1 | dedicated daily transfer round-up |
+| Guardian Transfer Window | 1 | dedicated transfer desk |
+| Sky Sports, BBC Sport, Guardian | 1 | general football, filtered to transfer stories |
+| 90min | 2 | aggregator, lower trust tier |
+
+Stories from the general feeds are keyword-filtered; the two dedicated desks
+pass through whole. Items are de-duplicated on title keywords (round-ups
+repeat each other) keeping the highest-trust telling, and tagged with any club
+they name using **exact** registry matches — fuzzy matching on prose would tag
+half the league every time a writer typed "united".
+
+The home page leads with the dedicated desks and falls back to general news.
+
+---
+
+## Continental competitions
+
+The Champions League is marked `continental: True` in `leagues.py`, which
+changes two behaviours:
+
+- **Club resolution is not league-scoped.** Domestic leagues reject a club
+  from another league (that guard is what stopped Athletic Club MG becoming
+  Athletic Bilbao). Continental entrants come from everywhere, so UCL uses an
+  exact registry match across all leagues instead.
+- **The simulated season skips it.** A cup has no fixed membership, so there
+  is nothing to round-robin; `mock.py` returns an empty schedule rather than
+  raising on an empty club list.
+
+Its league-phase table is a single 36-team standing. Out of season the usual
+fallback shows the last completed one.
 
 ---
 

@@ -46,9 +46,6 @@ export async function renderVideos(ctx) {
         </div>` : ''}
     </div>
 
-    ${d.source === 'rss' && !d.has_api_key && d.count >= 15 ? notice(
-      'Showing the latest 15 episodes from the channel feed. Add '
-      + '<b>TF_YOUTUBE_API_KEY</b> to <b>.env</b> for the full back catalogue.', 'info') : ''}
 
     <div id="vid-grid"></div>`;
 

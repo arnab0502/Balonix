@@ -161,6 +161,11 @@ CLUB_BY_ID: dict[str, dict] = {c["id"]: c for c in CLUBS}
 CLUBS_BY_LEAGUE: dict[str, list[dict]] = {
     lid: [c for c in CLUBS if c["league"] == lid] for lid in _RAW
 }
+# Continental competitions have no permanent membership; entrants are clubs
+# from the domestic leagues above, so they get an empty bucket rather than a
+# missing key.
+for _lid in ("ucl",):
+    CLUBS_BY_LEAGUE.setdefault(_lid, [])
 
 # Loose name -> club lookup so provider payloads with slightly different naming
 # ("Man Utd", "Inter Milan", "Bayern Munchen") still resolve to our registry.

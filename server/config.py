@@ -78,6 +78,7 @@ class Settings:
     ttl_transfers: int = _int("TF_TTL_TRANSFERS", 21600)
     ttl_squads: int = _int("TF_TTL_SQUADS", 604800)
     ttl_videos: int = _int("TF_TTL_VIDEOS", 1800)
+    ttl_rumours: int = _int("TF_TTL_RUMOURS", 900)
 
     host: str = os.environ.get("TF_HOST", "127.0.0.1")
     port: int = _int("TF_PORT", 0) or _int("PORT", 8000)

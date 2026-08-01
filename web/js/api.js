@@ -21,6 +21,13 @@ async function req(path, { fresh = false, ttl = 30000, method = 'GET' } = {}) {
 
 export const api = {
   meta:       () => req('/meta', { ttl: 300000 }),
+  home:       () => req('/home', { ttl: 120000 }),
+  rumours:    ({ source, club, limit = 120 } = {}) => {
+                const p = new URLSearchParams({ limit });
+                if (source) p.set('source', source);
+                if (club) p.set('club', club);
+                return req(`/rumours?${p}`, { ttl: 300000 });
+              },
   matches:    day => req(`/matches?day=${day}`, { ttl: 60000 }),
   live:       (scope = 'big5', fresh = true) => req(`/live?scope=${scope}`, { fresh, ttl: 20000 }),
   match:      id => req(`/match/${encodeURIComponent(id)}`, { ttl: 25000 }),

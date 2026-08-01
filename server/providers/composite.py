@@ -176,13 +176,13 @@ class CompositeProvider:
     # ----------------------------------------------------------------- live
     async def live(self, scope: str = "big5") -> dict:
         try:
-            rows = await af.live_matches(big5_only=(scope == "big5"))
+            rows = await af.live_matches(covered_only=(scope == "big5"))
             payload = {"matches": _tag(rows, "apifootball", False),
                        "source": "apifootball", "simulated": False,
                        "scope": scope,
                        "poll_seconds": quota.suggested_poll_seconds()}
             if not rows and scope == "big5":
-                other = await af.live_matches(big5_only=False)
+                other = await af.live_matches(covered_only=False)
                 payload["elsewhere"] = _tag(other[:40], "apifootball", False)
                 payload["note"] = ("No big-five matches in play. "
                                    f"{len(other)} live worldwide.")
@@ -191,7 +191,7 @@ class CompositeProvider:
             stale = cache.peek_stale("af:live")
             if stale is not None:
                 rows = [af._match(r) for r in stale]
-                rows = [m for m in rows if m["league"] in af.BIG5_API_IDS.values()]
+                rows = [m for m in rows if m["league"] in af.COVERED_API_IDS.values()]
                 return {"matches": _tag(rows, "apifootball-cached", False),
                         "source": "apifootball-cached", "simulated": False,
                         "note": "Daily live budget spent - showing last fetched scores.",
@@ -220,7 +220,7 @@ class CompositeProvider:
                 stale = cache.peek_stale(f"af:fixtures:{day}")
                 if stale is not None:
                     rows = [af._match(r) for r in stale]
-                    rows = [m for m in rows if m["league"] in af.BIG5_API_IDS.values()]
+                    rows = [m for m in rows if m["league"] in af.COVERED_API_IDS.values()]
                     return {"matches": _tag(rows, "apifootball-cached", False),
                             "source": "apifootball-cached", "simulated": False, "date": day,
                             "note": "Request budget spent - cached fixtures."}

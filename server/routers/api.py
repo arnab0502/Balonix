@@ -13,6 +13,7 @@ from ..data.tickets import ticket_link
 from ..providers import build_provider
 from ..providers import apifootball as af
 from ..providers import youtube as yt
+from ..providers import news
 from ..quota import quota
 
 router = APIRouter(prefix="/api")
@@ -40,6 +41,98 @@ async def meta():
             "tickets": "real",
         },
     }
+
+
+@router.get("/home")
+async def home():
+    """Everything the landing page needs, in one round trip.
+
+    Built so the page is never empty: out of season there are no live games
+    and often none today either, so it falls back to the next fixtures on the
+    calendar and leans on transfers, rumours and the podcast.
+    """
+    import asyncio
+    from datetime import datetime, timezone
+
+    today = date.today()
+
+    async def safe(coro, default):
+        try:
+            return await coro
+        except Exception:
+            return default
+
+    live_data, transfers_data, rumour_data, video_data = await asyncio.gather(
+        safe(provider.live("big5") if provider.name == "composite" else provider.live(), {}),
+        safe(provider.transfers(None, 8, window="season", group="flat")
+             if provider.name == "composite" else provider.transfers(None, 8), {}),
+        safe(news.rumours(limit=40), {}),
+        safe(yt.videos(settings.youtube_channel) if settings.youtube_channel else _none(), {}),
+    )
+
+    live = [m for m in (live_data.get("matches") or [])]
+
+    # Walk forward until we find a day with fixtures, so "next up" is real.
+    upcoming: list = []
+    upcoming_day = None
+    for offset in range(0, 21):
+        day = (today + timedelta(days=offset)).isoformat()
+        got = await safe(provider.fixtures_by_date(day), {})
+        rows = [m for m in (got.get("matches") or [])
+                if (m.get("status") or {}).get("type") == "scheduled"]
+        if rows:
+            upcoming, upcoming_day = rows, day
+            break
+
+    results = []
+    for offset in range(1, 8):
+        day = (today - timedelta(days=offset)).isoformat()
+        got = await safe(provider.fixtures_by_date(day), {})
+        rows = [m for m in (got.get("matches") or [])
+                if (m.get("status") or {}).get("type") == "finished"]
+        if rows:
+            results = rows[:5]
+            break
+
+    leaders = []
+    for lg in LEAGUES:
+        table = await safe(provider.standings(lg["id"]), {})
+        rows = table.get("table") or []
+        if rows:
+            leaders.append({"league": lg, "season": table.get("season"),
+                            "top": rows[:3]})
+
+    return {
+        "live": live[:6],
+        "live_count": len(live),
+        "elsewhere_count": len(live_data.get("elsewhere") or []),
+        "upcoming": upcoming[:6],
+        "upcoming_day": upcoming_day,
+        "results": results,
+        "leaders": leaders,
+        "transfers": (transfers_data.get("transfers") or [])[:6],
+        "transfer_total": transfers_data.get("total_matching") or 0,
+        "transfer_window": transfers_data.get("window_label"),
+        # Lead with the dedicated transfer desks; general football news only
+        # fills the gaps.
+        "rumours": sorted(
+            (rumour_data.get("rumours") or []),
+            key=lambda r: (not r.get("desk"), r.get("tier", 9),
+                           -(len(r.get("clubs") or []))),
+        )[:5],
+        "episodes": (video_data.get("videos") or [])[:3],
+        "channel": video_data.get("channel"),
+        "counts": {
+            "leagues": len(LEAGUES),
+            "clubs": len(CLUBS),
+            "episodes": video_data.get("count") or 0,
+        },
+        "generated": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+async def _none():
+    return {}
 
 
 @router.get("/matches")
@@ -134,6 +227,15 @@ async def player(player_id: str):
     if not data:
         raise HTTPException(404, "player not found")
     return data
+
+
+@router.get("/rumours")
+async def rumours(source: str | None = None, club: str | None = None,
+                  limit: int = Query(80, ge=1, le=200)):
+    """Transfer talk aggregated from football news desks (RSS, no API key)."""
+    if source and source not in news.FEED_BY_ID:
+        raise HTTPException(404, "unknown source")
+    return await news.rumours(source=source, club=club, limit=limit)
 
 
 @router.get("/videos")

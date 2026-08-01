@@ -24,11 +24,12 @@ import httpx
 from ..cache import cache
 from ..config import settings
 from ..data.clubs import CLUB_BY_ID, CLUBS, resolve as resolve_club, resolve_exact
-from ..data.leagues import LEAGUE_BY_API_ID, LEAGUE_BY_ID, LEAGUES
+from ..data.leagues import CONTINENTAL, LEAGUE_BY_API_ID, LEAGUE_BY_ID, LEAGUES
 from ..data.tickets import ticket_link
 from ..quota import QuotaExceeded, quota
 
-BIG5_API_IDS = {lg["api_id"]: lg["id"] for lg in LEAGUES}
+# Every competition we cover, keyed by API-Football league id.
+COVERED_API_IDS = {lg["api_id"]: lg["id"] for lg in LEAGUES}
 
 _LIVE_STATUSES = {"1H", "2H", "HT", "ET", "BT", "P", "LIVE", "INT"}
 _DONE_STATUSES = {"FT", "AET", "PEN", "WO", "AWD"}
@@ -155,7 +156,11 @@ def _side(team: dict, goals, league_id: str | None = None) -> dict:
     # Only trust the club registry inside the big five. Outside it, names like
     # "Athletic Club MG U20" or Bhutan's "Premier League" sides would otherwise
     # fuzzy-match onto Athletic Bilbao and inherit the wrong ticket link.
-    if league_id:
+    if league_id in CONTINENTAL:
+        # Champions League sides come from every domestic league, so an exact
+        # registry hit from any of them is correct here.
+        club = resolve_exact(team.get("name"))
+    elif league_id:
         club = resolve_club(team.get("name"))
         if club and club["league"] != league_id:
             club = None
@@ -197,11 +202,13 @@ def _event(raw: dict, home_api_id: int | None) -> dict:
 
 def _ticket_for(home_name: str | None, league_id: str | None, venue: str | None):
     """Box-office link for a fixture, or None when we cannot be certain."""
-    if league_id:
+    if league_id and league_id not in CONTINENTAL:
         return ticket_link(home_name, league_id, venue=venue)
     club = resolve_exact(home_name)
     if club:
         return ticket_link(club["name"], club["league"], venue=venue)
+    if league_id:                       # continental, unknown club
+        return ticket_link(home_name, league_id, venue=venue)
     return None
 
 
@@ -212,7 +219,7 @@ def _match(raw: dict, *, detail: bool = False) -> dict:
     goals = raw.get("goals") or {}
     home_raw, away_raw = teams.get("home") or {}, teams.get("away") or {}
 
-    league_id = BIG5_API_IDS.get(lg.get("id"))
+    league_id = COVERED_API_IDS.get(lg.get("id"))
     meta = LEAGUE_BY_ID.get(league_id or "")
     venue = (fx.get("venue") or {}).get("name")
 
@@ -320,28 +327,28 @@ def _lineups(raw: list[dict], home_api_id: int | None) -> dict | None:
 # --------------------------------------------------------------------------
 # Public calls (all cached + budgeted)
 # --------------------------------------------------------------------------
-async def live_matches(big5_only: bool = True) -> list[dict]:
+async def live_matches(covered_only: bool = True) -> list[dict]:
     async def fetch():
         rows = await client.get("/fixtures", "live", live="all")
         return rows
 
     rows = await cache.get_or_set("af:live", settings.ttl_live, fetch)
     matches = [_match(r) for r in rows]
-    if big5_only:
-        matches = [m for m in matches if m["league"] in BIG5_API_IDS.values()]
+    if covered_only:
+        matches = [m for m in matches if m["league"] in COVERED_API_IDS.values()]
     matches.sort(key=lambda m: (m["league"], m["kickoff"] or ""))
     return matches
 
 
-async def fixtures_on(day: str, big5_only: bool = True) -> list[dict]:
+async def fixtures_on(day: str, covered_only: bool = True) -> list[dict]:
     """Only reliable for today +/- 1 day on the free plan."""
     async def fetch():
         return await client.get("/fixtures", "core", date=day, timezone="UTC")
 
     rows = await cache.get_or_set(f"af:fixtures:{day}", settings.ttl_fixtures, fetch)
     matches = [_match(r) for r in rows]
-    if big5_only:
-        matches = [m for m in matches if m["league"] in BIG5_API_IDS.values()]
+    if covered_only:
+        matches = [m for m in matches if m["league"] in COVERED_API_IDS.values()]
     matches.sort(key=lambda m: (m["kickoff"] or "", m["league"]))
     return matches
 

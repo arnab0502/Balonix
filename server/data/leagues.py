@@ -6,6 +6,19 @@ from __future__ import annotations
 
 LEAGUES: list[dict] = [
     {
+        "id": "ucl",
+        "api_id": 2,
+        "name": "Champions League",
+        "short": "UCL",
+        "country": "Europe",
+        "flag": "\U0001F3C6",
+        "accent": "#5b8cff",
+        "tickets": "https://www.uefa.com/uefachampionsleague/ticketing/",
+        # Continental: entrants come from every domestic league, so club
+        # lookups must not be scoped to a single one.
+        "continental": True,
+    },
+    {
         "id": "epl",
         "api_id": 39,
         "name": "Premier League",
@@ -68,6 +81,8 @@ LEAGUES: list[dict] = [
 ]
 
 LEAGUE_BY_ID = {lg["id"]: lg for lg in LEAGUES}
+CONTINENTAL = {lg["id"] for lg in LEAGUES if lg.get("continental")}
+DOMESTIC = [lg for lg in LEAGUES if not lg.get("continental")]
 LEAGUE_BY_API_ID = {lg["api_id"]: lg for lg in LEAGUES}
 LEAGUE_IDS = [lg["id"] for lg in LEAGUES]
 

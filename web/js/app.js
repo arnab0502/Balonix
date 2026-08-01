@@ -1,6 +1,8 @@
 // Router + app shell.
 import { api } from './api.js';
 import { $, $$, esc, installCrestFallback } from './util.js';
+import { renderHome } from './views/home.js';
+import { renderRumours } from './views/rumours.js';
 import { renderMatches, renderLive, stopPolling } from './views/matches.js';
 import { renderMatch } from './views/match.js';
 import { renderLeague } from './views/league.js';
@@ -11,9 +13,11 @@ import { renderTickets } from './views/tickets.js';
 import { renderVideos } from './views/videos.js';
 
 const NAV = [
+  { id: 'home',      href: '#/home',      icon: '🏠', label: 'Home' },
   { id: 'matches',   href: '#/matches',   icon: '⚽', label: 'Matches' },
   { id: 'live',      href: '#/live',      icon: '🔴', label: 'Live' },
   { id: 'transfers', href: '#/transfers', icon: '🔄', label: 'Transfers' },
+  { id: 'rumours',   href: '#/rumours',   icon: '🗞', label: 'Rumours' },
   { id: 'tickets',   href: '#/tickets',   icon: '🎟', label: 'Tickets' },
   { id: 'podcast',   href: '#/podcast',   icon: '🎙', label: 'Podcast' },
 ];
@@ -36,14 +40,16 @@ const ctx = {
 // Routing
 // --------------------------------------------------------------------------
 function parseHash() {
-  const raw = location.hash.replace(/^#\/?/, '') || 'matches';
+  const raw = location.hash.replace(/^#\/?/, '') || 'home';
   const [path, qs] = raw.split('?');
   const parts = path.split('/').filter(Boolean);
   const params = Object.fromEntries(new URLSearchParams(qs || ''));
-  return { route: parts[0] || 'matches', id: parts[1], params };
+  return { route: parts[0] || 'home', id: parts[1], params };
 }
 
 const ROUTES = {
+  home:      (c) => renderHome(c),
+  rumours:   (c, p) => renderRumours(c, p),
   matches:   (c, p) => renderMatches(c, p),
   live:      (c) => renderLive(c),
   match:     (c, p) => renderMatch(c, p),
@@ -58,7 +64,7 @@ const ROUTES = {
 async function route() {
   stopPolling();
   const { route: name, id, params } = parseHash();
-  const handler = ROUTES[name] || ROUTES.matches;
+  const handler = ROUTES[name] || ROUTES.home;
   markActive(name, id);
   closeRail();
   window.scrollTo(0, 0);
@@ -245,7 +251,7 @@ document.addEventListener('click', e => {
   wireSearch();
   wireRail();
   window.addEventListener('hashchange', route);
-  if (!location.hash) location.hash = '#/matches';
+  if (!location.hash) location.hash = '#/home';
   route();
   setInterval(refreshQuota, 30000);
 })();

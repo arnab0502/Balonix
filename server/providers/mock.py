@@ -16,7 +16,7 @@ import random
 from datetime import date, datetime, timedelta, timezone
 
 from ..data.clubs import CLUB_BY_ID, CLUBS, CLUBS_BY_LEAGUE
-from ..data.leagues import LEAGUES, LEAGUE_BY_ID
+from ..data.leagues import DOMESTIC, LEAGUES, LEAGUE_BY_ID
 from ..data.tickets import ticket_link
 
 # --------------------------------------------------------------------------
@@ -212,7 +212,10 @@ def schedule(league_id: str) -> list[dict]:
     if league_id in _SCHEDULE_CACHE:
         return _SCHEDULE_CACHE[league_id]
 
-    clubs = [c["id"] for c in CLUBS_BY_LEAGUE[league_id]]
+    clubs = [c["id"] for c in CLUBS_BY_LEAGUE.get(league_id, [])]
+    if len(clubs) < 4:
+        _SCHEDULE_CACHE[league_id] = []
+        return []
     rng = _rng("schedule", league_id)
     rng.shuffle(clubs)
     first = _round_robin(clubs)
@@ -254,7 +257,7 @@ def schedule(league_id: str) -> list[dict]:
 
 def _all_fixtures() -> list[dict]:
     out: list[dict] = []
-    for lg in LEAGUES:
+    for lg in DOMESTIC:            # continental cups have no fixed membership
         out.extend(schedule(lg["id"]))
     return out
 
