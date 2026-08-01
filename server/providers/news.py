@@ -168,23 +168,51 @@ class FeedError(RuntimeError):
     pass
 
 
+# Validators from the last fetch, so we can revalidate instead of re-download.
+# The Guardian returns 304 with an empty body, which costs the publisher (and
+# us) essentially nothing.
+_VALIDATORS: dict[str, dict[str, str]] = {}
+_LAST_BODY: dict[str, str] = {}
+
+
 async def _fetch_feed(feed: dict) -> list[dict]:
     async def fetch():
+        headers = dict(_UA)
+        prev = _VALIDATORS.get(feed["id"]) or {}
+        if prev.get("etag"):
+            headers["If-None-Match"] = prev["etag"]
+        elif prev.get("last_modified"):
+            headers["If-Modified-Since"] = prev["last_modified"]
+
         async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=6.0),
-                                     headers=_UA, follow_redirects=True) as c:
-            r = await c.get(feed["url"])
-            # Raise rather than return empty: the cache serves the last good
-            # copy on failure, so a blip does not blank a source for 15 minutes.
-            if r.status_code != 200:
-                raise FeedError(f"{feed['id']} returned HTTP {r.status_code}")
-            if "<" not in r.text[:200]:
-                raise FeedError(f"{feed['id']} did not return XML")
-            return r.text
+                                     follow_redirects=True) as c:
+            r = await c.get(feed["url"], headers=headers)
+
+        # Unchanged since last time: reuse what we already parsed.
+        if r.status_code == 304 and _LAST_BODY.get(feed["id"]):
+            return _LAST_BODY[feed["id"]]
+
+        # Raise rather than return empty: the cache serves the last good copy
+        # on failure, so a blip does not blank a source.
+        if r.status_code == 429:
+            raise FeedError(f"{feed['id']} rate-limited us (429)")
+        if r.status_code != 200:
+            raise FeedError(f"{feed['id']} returned HTTP {r.status_code}")
+        if "<" not in r.text[:200]:
+            raise FeedError(f"{feed['id']} did not return XML")
+
+        _VALIDATORS[feed["id"]] = {
+            "etag": r.headers.get("etag", ""),
+            "last_modified": r.headers.get("last-modified", ""),
+        }
+        _LAST_BODY[feed["id"]] = r.text
+        return r.text
 
     try:
         xml = await cache.get_or_set(f"news:{feed['id']}", settings.ttl_rumours, fetch)
     except Exception:
-        return []
+        # Last good copy beats an empty source.
+        xml = _LAST_BODY.get(feed["id"], "")
     return _parse(xml, feed) if xml else []
 
 

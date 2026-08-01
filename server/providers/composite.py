@@ -562,7 +562,8 @@ class CompositeProvider:
         if not q:
             return {"teams": [], "players": [], "leagues": []}
 
-        teams = [c for c in CLUBS
+        teams = [{**c, "logo": (TEAM_IDS.get(c["id"]) or {}).get("logo")}
+                 for c in CLUBS
                  if q in _fold(c["name"]) or q in _fold(c["short"])][:8]
         leagues = [lg for lg in LEAGUES if q in _fold(lg["name"])][:5]
 

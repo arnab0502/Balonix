@@ -1,6 +1,32 @@
 // Shared render pieces used by more than one view.
 import { crest, esc, kickoffTime } from './util.js';
 
+const TODAY = new Date().toDateString();
+
+/** Kickoff cell for a fixture that has not started.
+ *  Lists spanning several dates (a competition's fixture list, a club's next
+ *  games) need the date, not just a bare time. */
+function scheduledCell(kickoff) {
+  const d = kickoff ? new Date(kickoff) : null;
+  const sameDay = d && d.toDateString() === TODAY;
+  const date = d && !sameDay
+    ? `<div class="m-date">${esc(d.toLocaleDateString([], { day: 'numeric', month: 'short' }))}</div>`
+    : '';
+  return `${date}<div class="clock">${kickoffTime(kickoff)}</div>` +
+         `<div class="state">${sameDay ? 'KO' : esc(d ? d.toLocaleDateString([], { weekday: 'short' }) : '')}</div>`;
+}
+
+/** Kickoff cell for a finished match. A results list also spans dates. */
+function finishedCell(kickoff) {
+  const d = kickoff ? new Date(kickoff) : null;
+  const sameDay = d && d.toDateString() === TODAY;
+  return (d && !sameDay
+      ? `<div class="m-date muted">${esc(d.toLocaleDateString([], { day: 'numeric', month: 'short' }))}</div>`
+      : '')
+    + `<div class="clock">FT</div>`
+    + `<div class="state">${sameDay ? 'Full time' : ''}</div>`;
+}
+
 /** One match row. Clicking it routes to the detail view; the ticket link does not. */
 export function matchRow(m) {
   const st = m.status || {};
@@ -21,8 +47,8 @@ export function matchRow(m) {
       ? `<div class="clock">${esc(st.label)}</div>
          <div class="state"><span class="live-dot"></span>Live</div>`
       : done
-        ? `<div class="clock">FT</div><div class="state">Full time</div>`
-        : `<div class="clock">${kickoffTime(m.kickoff)}</div><div class="state">KO</div>`;
+        ? finishedCell(m.kickoff)
+        : scheduledCell(m.kickoff);
 
   const side = (s, lost) => `
     <div class="m-team ${lost ? 'dim' : ''}">

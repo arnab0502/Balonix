@@ -1,9 +1,18 @@
 // Rumour mill: transfer talk aggregated from football news desks.
-import { api } from '../api.js';
+import { api, bustCache } from '../api.js';
 import { $, emptyState, esc, notice, relTime, skeleton } from '../util.js';
 
 const state = { source: '', club: '', q: '' };
 let timer = null;
+let refreshTimer = null;
+
+/** Poll our own API while the tab is open. This never reaches the publishers -
+ *  the server's cache is the only thing that talks to them. */
+const REFRESH_MS = 120000;
+
+export function stopRumourRefresh() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+}
 
 export async function renderRumours(ctx, params) {
   state.club = params.club || '';
@@ -63,6 +72,23 @@ export async function renderRumours(ctx, params) {
       : emptyState('🔍', 'Nothing matches', 'Try another source or search term.');
   }
   paint();
+
+  stopRumourRefresh();
+  refreshTimer = setInterval(async () => {
+    if (!document.querySelector('#rm-body')) { stopRumourRefresh(); return; }
+    try {
+      bustCache('/rumours');
+      const fresh = await api.rumours({ club: state.club });
+      const known = new Set(data.rumours.map(r => r.id));
+      const added = fresh.rumours.filter(r => !known.has(r.id)).length;
+      data = fresh;
+      paint();
+      if (added) {
+        const c = document.querySelector('.rm-count');
+        if (c) c.innerHTML += ` · <span class="rm-new">${added} new</span>`;
+      }
+    } catch { /* keep showing what we have */ }
+  }, REFRESH_MS);
 }
 
 function card(r) {

@@ -2,7 +2,7 @@
 import { api } from './api.js';
 import { $, $$, crest, esc, installCrestFallback } from './util.js';
 import { renderHome } from './views/home.js';
-import { renderRumours } from './views/rumours.js';
+import { renderRumours, stopRumourRefresh } from './views/rumours.js';
 import { renderMatches, renderLive, stopPolling } from './views/matches.js';
 import { renderMatch } from './views/match.js';
 import { renderLeague } from './views/league.js';
@@ -63,6 +63,7 @@ const ROUTES = {
 
 async function route() {
   stopPolling();
+  stopRumourRefresh();
   const { route: name, id, params } = parseHash();
   const handler = ROUTES[name] || ROUTES.home;
   markActive(name, id);
