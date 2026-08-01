@@ -9,7 +9,7 @@ from ..cache import cache
 from ..config import settings
 from ..data.clubs import CLUB_BY_ID, CLUBS, CLUBS_BY_LEAGUE
 from ..data.leagues import LEAGUES, LEAGUE_BY_ID
-from ..data.tickets import ticket_link
+from ..data.tickets import ticket_link, search_fallback
 from ..providers import build_provider
 from ..providers.composite import TEAM_IDS
 from ..providers import apifootball as af
@@ -331,7 +331,8 @@ async def all_tickets(league: str | None = None):
         "clubs": [
             {"id": c["id"], "name": c["name"], "short": c["short"],
              "tla": c["tla"], "league": c["league"], "stadium": c["stadium"],
-             "colour": c["colour"], "ticket_url": c["ticket_url"],
+             "colour": c["colour"],
+             "ticket_url": c["ticket_url"] or search_fallback(c["name"]),
              "logo": (TEAM_IDS.get(c["id"]) or {}).get("logo")}
             for c in clubs
         ]

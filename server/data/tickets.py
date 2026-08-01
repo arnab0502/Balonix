@@ -17,7 +17,7 @@ from .clubs import CLUB_BY_ID, resolve as resolve_club
 from .leagues import LEAGUE_BY_ID
 
 
-def _search_fallback(club_name: str) -> str:
+def search_fallback(club_name: str) -> str:
     return "https://duckduckgo.com/?q=" + quote_plus(f"{club_name} official tickets buy")
 
 
@@ -43,7 +43,7 @@ def ticket_link(home_team: str | None, league_id: str | None = None, *, venue: s
         # Known club, but we have no trustworthy box-office URL for it (its
         # domain is parked or dead). A scoped search beats a parked page.
         return {
-            "url": _search_fallback(club["name"]),
+            "url": search_fallback(club["name"]),
             "label": f"Find tickets - {club['short']}",
             "source": "search", "venue": venue or club["stadium"],
             "neutral_venue": False, "confidence": "low",
@@ -62,7 +62,7 @@ def ticket_link(home_team: str | None, league_id: str | None = None, *, venue: s
 
     name = home_team or "football"
     return {
-        "url": _search_fallback(name),
+        "url": search_fallback(name),
         "label": f"Find tickets - {name}",
         "source": "search",
         "venue": venue,
