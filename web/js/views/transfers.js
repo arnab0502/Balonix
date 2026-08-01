@@ -244,10 +244,15 @@ function pitchBlock(d) {
     })}
 
     ${d.arrivals?.length ? `<div class="xi-sub">
-      <h4>Arrivals this window</h4>
+      <h4>Arrivals this window <span class="xi-num">${d.arrivals.length}</span></h4>
       <div class="bench-list">${d.arrivals.map(p => `
-        <a class="bench-chip is-new" href="#/player/${esc(p.id)}">★ ${esc(p.name)}${
-          p.from_club ? ` · ${esc(p.from_club)}` : ''}</a>`).join('')}</div>
+        <a class="bench-chip is-new${p.in_squad === false ? ' unreg' : ''}"
+           href="#/player/${esc(p.id)}"
+           title="${p.in_squad === false
+             ? 'Signed, but not yet in the registered squad'
+             : esc(p.name || '')}">★ ${esc(p.name)}${
+          p.from_club ? ` · ${esc(p.from_club)}` : ''}${
+          p.in_squad === false ? ' <i>unregistered</i>' : ''}</a>`).join('')}</div>
     </div>` : ''}
 
     ${d.bench?.length ? `<div class="xi-sub">

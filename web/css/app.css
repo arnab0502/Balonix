@@ -1058,6 +1058,11 @@ a.sq-card:hover { background: var(--surface-3); }
 .xi-sub h4 { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em;
   color: var(--muted); margin-bottom: 8px; }
 .bench-chip.is-new { border-color: rgba(200,255,46,.4); color: var(--accent); }
+.bench-chip.unreg { border-style: dashed; opacity: .8; }
+.bench-chip.unreg i { font-style: normal; font-size: 9px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); margin-left: 4px; }
+.xi-num { font-family: var(--mono); font-size: 10px; background: var(--surface-3);
+  color: var(--text-2); border-radius: 20px; padding: 1px 7px; margin-left: 4px; }
 .bench-chip.out { color: var(--muted); text-decoration: line-through; opacity: .75; }
 .bench-chip b { font-family: var(--mono); color: var(--muted); font-weight: 600;
   margin-right: 5px; }

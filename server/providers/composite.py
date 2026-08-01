@@ -826,17 +826,26 @@ class CompositeProvider:
                                    "basis": "starts", "replaces": None,
                                    "new_signing": pick["id"] in new_ids})
 
-        # Every arrival in the current squad, with where they came from.
+        # Every arrival, with where they came from. A signing occasionally has
+        # no roster entry at all - a returning loanee like Disasi is
+        # contractually Chelsea's but appears in neither player endpoint until
+        # he is re-registered. List him anyway, flagged, so the count here
+        # always matches the In column on the transfers tab.
         by_pid = {p["id"]: p for p in players}
         arrivals = []
         for pid, t in arrivals_by_id.items():
             p = by_pid.get(pid)
-            if not p:
-                continue
-            arrivals.append({**p, "new_signing": True,
-                             "from_club": t["from"].get("name"),
-                             "signed": t.get("date"),
-                             "in_xi": pid in picked})
+            arrivals.append({
+                **(p or {"id": pid, "name": t["player"].get("name"),
+                         "photo": t["player"].get("logo"), "starts": 0,
+                         "apps": 0, "minutes": 0, "rating": None,
+                         "position": None}),
+                "new_signing": True,
+                "from_club": t["from"].get("name"),
+                "signed": t.get("date"),
+                "in_xi": pid in picked,
+                "in_squad": p is not None,
+            })
         arrivals.sort(key=lambda a: (a.get("signed") or ""), reverse=True)
 
         bench = [{**p, "new_signing": p["id"] in new_ids}
