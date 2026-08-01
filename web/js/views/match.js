@@ -1,6 +1,8 @@
 // Match detail: hero score, tickets CTA, timeline, stats, lineups, h2h.
 import { api } from '../api.js';
 import { formStrip, sourcePill } from '../components.js';
+import { pitch } from '../pitch.js';
+import { api as apiClient } from '../api.js';
 import { $, crest, emptyState, esc, eventIcon, kickoffTime, notice, shortDate, skeleton } from '../util.js';
 
 const STAT_LABELS = {
@@ -90,7 +92,15 @@ export async function renderMatch(ctx, params) {
     $('#md-tabs').querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     tab.classList.add('active');
     body.innerHTML = panels[tab.dataset.tab]();
+    wireXIButton(m, body);
   });
+  wireXIButton(m, body);
+}
+
+function wireXIButton(m, body) {
+  const btn = body.querySelector('#xi-load');
+  if (!btn) return;
+  btn.addEventListener('click', () => loadMatchXI(m, body.querySelector('#xi-slot'), btn));
 }
 
 function summaryPanel(m, started) {
@@ -169,21 +179,37 @@ function unavailablePanel(m) {
 function lineupsPanel(m) {
   const l = m.lineups;
   const un = unavailablePanel(m);
-  if (!l || (!l.home && !l.away)) {
-    return un || emptyState('👥', 'Lineups not published yet');
+  const hasReal = l && (l.home || l.away);
+
+  if (!hasReal) {
+    // Nothing published yet - offer the probable XI for both sides instead of
+    // an empty tab. Loaded lazily, since it is several upstream calls.
+    return un + `
+      <div class="card">
+        <h3>Lineups not published yet</h3>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:12px">
+          Clubs release teamsheets about an hour before kick-off. Until then,
+          here is the probable XI for each side.
+        </p>
+        <button class="btn" id="xi-load">Show probable XI</button>
+      </div>
+      <div id="xi-slot"></div>`;
   }
+
   return un + ['home', 'away'].filter(k => l[k]).map(k => {
     const t = l[k];
     return `<div class="card">
-      <div class="lineup-head">
-        <b>${esc(t.team || '')}</b>
-        <span class="fm">${esc(t.formation || '')}</span>
-      </div>
       ${t.coach ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">
                      Coach · ${esc(t.coach)}</div>` : ''}
-      <div class="pitch"><div class="pitch-half ${k === 'away' ? 'away' : ''}">
-        ${pitchLines(t)}
-      </div></div>
+      ${pitch(t.starters || [], {
+        colour: t.colour,
+        formation: t.formation,
+        title: t.team,
+        subtitle: k === 'home' ? 'Home' : 'Away',
+        stat: p => p.rating ?? null,
+        statLabel: t.starters?.some(p => p.rating) ? 'number shown is match rating' : '',
+        flip: k === 'away',
+      })}
       ${t.bench?.length ? `<h3 style="margin-top:15px">Bench</h3>
         <div class="bench-list">${t.bench.map(p =>
           `<span class="bench-chip"><b>${p.number ?? ''}</b>${esc(p.name || '')}</span>`).join('')}
@@ -192,39 +218,38 @@ function lineupsPanel(m) {
   }).join('');
 }
 
-function pitchLines(team) {
-  const players = team.starters || [];
-  if (!players.length) return '';
-  // Prefer the provider's grid ("row:col"); fall back to the formation string.
-  const rows = new Map();
-  const hasGrid = players.some(p => p.grid);
-  if (hasGrid) {
-    for (const p of players) {
-      const row = Number((p.grid || '1:1').split(':')[0]);
-      if (!rows.has(row)) rows.set(row, []);
-      rows.get(row).push(p);
-    }
-  } else {
-    const shape = (team.formation || '4-3-3').split('-').map(Number).filter(Boolean);
-    let idx = 1;
-    rows.set(1, [players[0]]);
-    shape.forEach((n, i) => {
-      rows.set(i + 2, players.slice(idx, idx + n));
-      idx += n;
-    });
+/** Fetch and render both probable XIs on the match page. */
+export async function loadMatchXI(m, slot, button) {
+  button.disabled = true;
+  button.textContent = 'Working it out…';
+  const sides = [m.home, m.away].filter(s => s && !String(s.id).startsWith('api-'));
+  if (!sides.length) {
+    slot.innerHTML = `<div class="card"><p style="color:var(--muted);font-size:13px">
+      No squad data for these clubs.</p></div>`;
+    return;
   }
-  return [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, line]) => `
-    <div class="p-line">${line.map(p => `
-      <div class="p-man">
-        <span class="p-shirt" style="background:${esc(team.colour || '#39443e')}">${p.number ?? ''}</span>
-        <span class="p-name">${esc(lastName(p.name))}</span>
-        ${p.rating ? `<span class="p-rate">${p.rating}</span>` : ''}
-      </div>`).join('')}</div>`).join('');
-}
-
-function lastName(name = '') {
-  const parts = String(name).trim().split(' ');
-  return parts.length > 1 ? parts[parts.length - 1] : name;
+  try {
+    const results = await Promise.all(sides.map(s => apiClient.lineup(s.id).catch(() => null)));
+    const blocks = results.map((d, i) => {
+      if (!d?.available) return '';
+      return `<div class="card">${pitch(d.xi, {
+        colour: d.club.colour,
+        formation: d.formation,
+        title: d.club.short,
+        subtitle: `probable · ${d.new_signings} new`,
+        stat: p => p.starts || null,
+        statLabel: 'number shown is starts last season',
+        flip: i === 1,
+      })}</div>`;
+    }).filter(Boolean).join('');
+    slot.innerHTML = blocks || `<div class="card"><p style="color:var(--muted);font-size:13px">
+      Could not build a probable XI for this fixture.</p></div>`;
+    button.closest('.card')?.remove();
+  } catch (err) {
+    button.disabled = false;
+    button.textContent = 'Show probable XI';
+    slot.innerHTML = `<div class="card"><p style="color:var(--muted);font-size:13px">${esc(err.message)}</p></div>`;
+  }
 }
 
 function h2hPanel(m) {

@@ -1,6 +1,7 @@
 // Transfer feed - grouped by club by default, with search.
 import { api, bustCache } from '../api.js';
 import { sourcePill } from '../components.js';
+import { pitch } from '../pitch.js';
 import { $, crest, emptyState, esc, money, notice, relTime, shortDate, skeleton } from '../util.js';
 
 const state = { league: '', kind: '', group: 'club', q: '', window: 'season' };
@@ -198,38 +199,25 @@ async function loadXI(slot) {
 
 /* ------------------------------------------------------ probable XI */
 function pitchBlock(d) {
-  const rows = new Map();
-  for (const p of d.xi) {
-    const [r, col] = String(p.grid || '1:1').split(':').map(Number);
-    if (!rows.has(r)) rows.set(r, []);
-    rows.get(r).push({ ...p, col: col || 0 });
-  }
-  const lines = [...rows.entries()].sort((a, b) => a[0] - b[0])
-    .map(([, line]) => line.sort((a, b) => a.col - b.col));
-
   return `
     <div class="xi-head">
       <b>Probable XI</b>
-      <span class="xi-form">${esc(d.formation || '')}</span>
       <span class="xi-note">${esc(d.season)} data · ${esc(d.basis)}</span>
     </div>
-    <div class="pitch xi-pitch"><div class="pitch-half">
-      ${lines.map(line => `
-        <div class="p-line">${line.map(p => `
-          <a class="p-man ${p.new_signing ? 'is-new' : ''}"
-             href="#/player/${esc(p.id)}" title="${esc(p.name)} — ${p.starts} starts${
-               p.replaces ? ', in for ' + esc(p.replaces) : ''}">
-            <span class="p-shirt" style="background:${esc(d.club.colour)}">${
-              p.new_signing ? '★' : (p.starts ?? '')}</span>
-            <span class="p-name">${esc(lastName(p.name))}</span>
-            ${p.replaces ? `<span class="p-rep">for ${esc(lastName(p.replaces))}</span>` : ''}
-          </a>`).join('')}</div>`).join('')}
-    </div></div>
+    ${pitch(d.xi, {
+      colour: d.club.colour,
+      formation: d.formation,
+      title: d.club.short,
+      subtitle: `${d.new_signings} signings this window`,
+      stat: p => p.starts || null,
+      statLabel: 'number shown is starts last season',
+    })}
 
     ${d.arrivals?.length ? `<div class="xi-sub">
-      <h4>New arrivals, no minutes yet</h4>
+      <h4>Arrivals this window</h4>
       <div class="bench-list">${d.arrivals.map(p => `
-        <a class="bench-chip is-new" href="#/player/${esc(p.id)}">★ ${esc(p.name)}</a>`).join('')}</div>
+        <a class="bench-chip is-new" href="#/player/${esc(p.id)}">★ ${esc(p.name)}${
+          p.from_club ? ` · ${esc(p.from_club)}` : ''}</a>`).join('')}</div>
     </div>` : ''}
 
     ${d.bench?.length ? `<div class="xi-sub">
@@ -249,10 +237,6 @@ function pitchBlock(d) {
       XI and who actually starts — not an official teamsheet.</p>`;
 }
 
-function lastName(name = '') {
-  const parts = String(name).trim().split(' ');
-  return parts.length > 1 ? parts[parts.length - 1] : name;
-}
 
 /* ----------------------------------------------------------------- latest */
 function kindLabel(k) {

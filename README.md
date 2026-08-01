@@ -199,10 +199,27 @@ The home page leads with the dedicated desks and falls back to general news.
 
 ---
 
+## The pitch
+
+`web/js/pitch.js` renders both the real lineups and the probable XI. Pure
+CSS and inline SVG — no images, no libraries:
+
+- proper markings (boxes, six-yard, D-arcs, centre circle, penalty and corner
+  arcs) drawn as SVG that stretches with the container
+- mown stripes, a floodlight falloff at the corners and a soft accent glow
+- player tokens carrying a real photo, a jersey-tinted ring, a stat chip
+  (match rating on a played game, starts on a probable XI) and a ★ on new
+  signings
+- rows come from the provider's `grid` ("2:4" = second row, fourth across), so
+  players sit where they actually played; away sides are flipped
+
+---
+
 ## Probable XI
 
 Expand a club card in **Transfers** and it builds a likely XI on a pitch,
-lazily (nobody wants 110 lineup requests on page load).
+lazily (nobody wants 110 lineup requests on page load). The same XI appears
+on a **match page** when teamsheets have not been published yet.
 
 Four real signals, no guessing:
 

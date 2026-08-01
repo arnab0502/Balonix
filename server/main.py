@@ -66,10 +66,16 @@ class RevalidatingStatics(StaticFiles):
 app.mount("/static", RevalidatingStatics(directory=WEB_DIR), name="static")
 
 
+# The shell must never be cached: it is the one file that decides which
+# script URLs the browser loads, so a stale copy pins the whole app to an old
+# build (it kept serving a nav that pointed at the wrong landing route).
+_NO_CACHE = {"Cache-Control": "no-cache, must-revalidate"}
+
+
 @app.get("/{full_path:path}")
 async def spa(full_path: str):
     """Serve the single-page app for every non-API route."""
     candidate = (WEB_DIR / full_path).resolve()
     if full_path and candidate.is_file() and WEB_DIR in candidate.parents:
-        return FileResponse(candidate)
-    return FileResponse(WEB_DIR / "index.html")
+        return FileResponse(candidate, headers=_NO_CACHE)
+    return FileResponse(WEB_DIR / "index.html", headers=_NO_CACHE)
