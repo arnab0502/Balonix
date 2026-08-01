@@ -33,6 +33,9 @@ export const api = {
   match:      id => req(`/match/${encodeURIComponent(id)}`, { ttl: 25000 }),
   standings:  lg => req(`/league/${lg}/standings`, { ttl: 600000 }),
   scorers:    lg => req(`/league/${lg}/scorers`, { ttl: 600000 }),
+  honours:    lg => req(`/league/${lg}/honours`, { ttl: 3600000 }),
+  leagueFixtures: (lg, when = 'next') =>
+                req(`/league/${lg}/fixtures?when=${when}&count=30`, { ttl: 300000 }),
   transfers:  ({ league, q = '', group = 'club', limit = 400, window = 'season' } = {}) => {
                 const p = new URLSearchParams({ limit, group, window });
                 if (league) p.set('league', league);

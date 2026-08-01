@@ -20,11 +20,11 @@ No Node, no build step. FastAPI serves a vanilla-JS single-page app.
 |---|---|
 | **Matches** | Date strip, live block, fixtures grouped by competition, per-league colour coding |
 | **Match detail** | Score hero, event timeline, stat bars, pitch-view lineups, **player ratings**, real head-to-head with a W-D-L summary, **unavailable players** with reasons |
-| **Leagues** | Standings with European/relegation cut-offs, top scorers, club ticket directory |
+| **Leagues** | Standings with European/relegation cut-offs, **fixtures and results**, top scorers, **roll of honour**, club ticket directory |
 | **Transfers** | Filterable feed across the big five by league and deal type |
 | **Clubs** | Squad, results, upcoming fixtures, recent business, ticket link |
 | **Tickets** | Every fixture links to the **home club's own box office** — never a resale site |
-| **Players** | Profile, per-competition season stats, career clubs, transfer history |
+| **Players** | Profile, season stats, **full career grouped by competition** with per-season rows, **league rankings**, clubs, transfer history |
 | **Home** | Adaptive hero (live scores, else the next real fixture), stat rail, rumour mill, latest transfers, league leaders, newest episodes |
 | **Rumours** | Transfer talk aggregated from BBC Gossip, Guardian Transfers, Sky, BBC, Guardian and 90min — filterable by source, searchable, club-tagged |
 | **Search** | Clubs, players, competitions — player names open the player page |
@@ -196,6 +196,29 @@ they name using **exact** registry matches — fuzzy matching on prose would tag
 half the league every time a writer typed "united".
 
 The home page leads with the dedicated desks and falls back to general news.
+
+---
+
+## Player career stats
+
+The **By competition** tab groups a player's whole career by tournament, with
+per-season rows underneath. Bruno Fernandes reads: Premier League 231 apps
+71g/72a across 2019/20–2025/26, plus Primeira Liga, Champions League, Europa
+League, Nations League and the cups.
+
+Seasons come from `/players/seasons`, then one `/players?id=&season=` call per
+season. That is capped at the **10 most recent** and cached for a week, so a
+15-season career doesn't cost 15 calls on every page view.
+
+### League rankings
+
+Ranked against each competition's **published top-20 chart**
+(`/players/topscorers` and `/players/topassists`), which are cached per
+league-season and therefore shared across every player you look at.
+
+A player outside the top 20 simply gets no rank — the app does not invent a
+position it cannot verify. Bruno shows *#1 for assists, 21* in the Premier
+League.
 
 ---
 

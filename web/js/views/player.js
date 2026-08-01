@@ -49,13 +49,15 @@ export async function renderPlayer(ctx, params) {
 
     <div class="tabs" id="pl-tabs">
       <div class="tab active" data-tab="stats">Season ${esc(d.season || '')}</div>
-      <div class="tab" data-tab="career">Career</div>
+      <div class="tab" data-tab="competitions">By competition</div>
+      <div class="tab" data-tab="career">Clubs</div>
       <div class="tab" data-tab="transfers">Transfers</div>
     </div>
     <div id="pl-body"></div>`;
 
   const panels = {
     stats: () => statsPanel(d),
+    competitions: () => competitionsPanel(d),
     career: () => careerPanel(d),
     transfers: () => transfersPanel(d),
   };
@@ -104,6 +106,67 @@ function statsPanel(d) {
           <td class="num col-opt">${s.yellow}${s.red ? ` / ${s.red}` : ''}</td>
         </tr>`).join('')}
       </tbody></table></div></div>`;
+}
+
+function competitionsPanel(d) {
+  const comps = d.competitions || [];
+  if (!comps.length) return emptyState('📊', 'No career data');
+  const seasons = d.seasons_covered || [];
+  const span = seasons.length
+    ? `${seasons[seasons.length - 1]}–${seasons[0]}` : '';
+
+  return rankingsBlock(d) + `
+    <div class="season-tag">Data available ${esc(span)}</div>
+    ${comps.map(c => `
+      <div class="card comp-card">
+        <div class="comp-head">
+          ${c.logo ? `<img class="comp-logo" src="${esc(c.logo)}" alt="" loading="lazy">` : ''}
+          <div class="comp-id">
+            <b>${esc(c.competition)}</b>
+            <small>${esc(c.span)}${c.country ? ' · ' + esc(c.country) : ''}</small>
+          </div>
+          <div class="comp-totals">
+            <span><b>${c.apps}</b>apps</span>
+            <span><b>${c.goals}</b>goals</span>
+            <span><b>${c.assists}</b>assists</span>
+            ${c.rating ? `<span><b>${c.rating}</b>rating</span>` : ''}
+          </div>
+        </div>
+        <div class="table-wrap"><table class="tbl comp-tbl">
+          <thead><tr><th>Season</th><th>Club</th>
+            <th class="num">Apps</th><th class="num">G</th><th class="num">A</th>
+            <th class="num col-opt">Mins</th><th class="num col-opt">Rating</th></tr></thead>
+          <tbody>${c.seasons.map(r => `
+            <tr>
+              <td>${esc(r.season_label)}</td>
+              <td><div class="team-cell">
+                ${r.team_logo ? `<img class="crest" src="${esc(r.team_logo)}" alt="" loading="lazy">` : ''}
+                <span>${esc(r.team || '')}</span></div></td>
+              <td class="num">${r.apps}</td>
+              <td class="num"><b>${r.goals}</b></td>
+              <td class="num">${r.assists}</td>
+              <td class="num col-opt">${r.minutes}</td>
+              <td class="num col-opt">${r.rating ?? '–'}</td>
+            </tr>`).join('')}
+          </tbody></table></div>
+      </div>`).join('')}`;
+}
+
+function rankingsBlock(d) {
+  const rows = d.rankings || [];
+  if (!rows.length) return '';
+  return `<div class="card"><h3>League rankings</h3>
+    <div class="rank-grid">${rows.map(r => `
+      <div class="rank-card" style="--c:${esc(r.accent)}">
+        <div class="rank-lg">${esc(r.league)} <span>${esc(r.season)}</span></div>
+        ${r.goals_rank ? `<div class="rank-line"><b>#${r.goals_rank}</b>
+          <span>for goals · ${r.goals}</span></div>` : ''}
+        ${r.assists_rank ? `<div class="rank-line"><b>#${r.assists_rank}</b>
+          <span>for assists · ${r.assists}</span></div>` : ''}
+      </div>`).join('')}</div>
+    <p class="rank-note">Ranked against each competition's published top-20 chart.
+      No rank shown means outside the top 20.</p>
+  </div>`;
 }
 
 function careerPanel(d) {

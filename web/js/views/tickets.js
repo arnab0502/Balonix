@@ -1,6 +1,6 @@
 // Full official ticketing directory across the big five.
 import { api } from '../api.js';
-import { $, emptyState, esc, notice, skeleton } from '../util.js';
+import { $, crest, emptyState, esc, notice, skeleton } from '../util.js';
 
 export async function renderTickets(ctx) {
   const root = $('#view');
@@ -32,8 +32,7 @@ export async function renderTickets(ctx) {
         <div class="tix-grid">${clubs.map(c => `
           <a class="tix-card" style="--edge:${esc(c.colour)}"
              href="${esc(c.ticket_url)}" target="_blank" rel="noopener noreferrer">
-            <span class="crest-fb" style="background:${esc(c.colour)};width:34px;height:34px;font-size:11px;border-radius:9px">
-              ${esc(c.short.slice(0, 3).toUpperCase())}</span>
+          ${crest(c, 'tix-crest')}
             <span class="info"><b>${esc(c.name)}</b><small>${esc(c.stadium)}</small></span>
             <span style="color:var(--accent);font-size:15px">🎟</span>
           </a>`).join('')}</div>

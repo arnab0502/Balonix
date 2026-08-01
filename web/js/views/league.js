@@ -1,6 +1,6 @@
 // League page: standings table, scorers chart, and the club ticket directory.
 import { api } from '../api.js';
-import { formStrip, sourcePill } from '../components.js';
+import { formStrip, leagueBlocks, matchRow, sourcePill } from '../components.js';
 import { $, crest, emptyState, esc, notice, skeleton } from '../util.js';
 
 const QUALIFY = {
@@ -23,7 +23,9 @@ export async function renderLeague(ctx, params) {
     </div>
     <div class="tabs" id="lg-tabs">
       <div class="tab active" data-tab="table">Table</div>
+      <div class="tab" data-tab="fixtures">Fixtures</div>
       <div class="tab" data-tab="scorers">Top scorers</div>
+      <div class="tab" data-tab="honours">Roll of honour</div>
       <div class="tab" data-tab="tickets">Ticket directory</div>
     </div>
     <div id="lg-body">${skeleton(8)}</div>`;
@@ -31,7 +33,9 @@ export async function renderLeague(ctx, params) {
   const body = $('#lg-body');
   const panels = {
     table: () => tablePanel(ctx, lid),
+    fixtures: () => fixturesPanel(ctx, lid),
     scorers: () => scorersPanel(ctx, lid),
+    honours: () => honoursPanel(ctx, lid),
     tickets: () => ticketsPanel(ctx, lid),
   };
   panels.table();
@@ -112,6 +116,40 @@ async function tablePanel(ctx, lid) {
   }
 }
 
+async function fixturesPanel(ctx, lid) {
+  const body = $('#lg-body');
+  body.innerHTML = `
+    <div class="tr-toolbar">
+      <div class="seg" id="fx-when">
+        <button class="seg-btn active" data-when="next">Upcoming</button>
+        <button class="seg-btn" data-when="last">Results</button>
+      </div>
+    </div>
+    <div id="fx-rows">${skeleton(6)}</div>`;
+
+  const load = async when => {
+    const rows = $('#fx-rows');
+    rows.innerHTML = skeleton(6);
+    try {
+      const data = await api.leagueFixtures(lid, when);
+      ctx.setPill(sourcePill(data));
+      rows.innerHTML = data.matches?.length
+        ? data.matches.map(matchRow).join('')
+        : emptyState('🗓', when === 'next' ? 'No upcoming fixtures' : 'No results yet');
+    } catch (err) {
+      rows.innerHTML = emptyState('⚠', 'Could not load fixtures', err.message);
+    }
+  };
+  load('next');
+
+  $('#fx-when').addEventListener('click', e => {
+    const b = e.target.closest('[data-when]'); if (!b) return;
+    $('#fx-when').querySelectorAll('.seg-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    load(b.dataset.when);
+  });
+}
+
 async function scorersPanel(ctx, lid) {
   const body = $('#lg-body');
   try {
@@ -158,6 +196,46 @@ async function scorersPanel(ctx, lid) {
   }
 }
 
+async function honoursPanel(ctx, lid) {
+  const body = $('#lg-body');
+  try {
+    const data = await api.honours(lid);
+    ctx.setPill({ text: 'Live data', cls: 'real' });
+    const rows = data.honours || [];
+    if (!rows.length) {
+      body.innerHTML = emptyState('🏆', 'No finals on record',
+        'League competitions are decided on the table, not a final.');
+      return;
+    }
+    const champ = rows[0];
+    body.innerHTML = `
+      <div class="champ-card">
+        <div class="champ-eyebrow">Reigning champions · ${esc(champ.season_label)}</div>
+        <div class="champ-main">
+          ${crest(champ.winner, 'champ-crest')}
+          <div>
+            <h2>${esc(champ.winner.name)}</h2>
+            <div class="champ-sub">beat ${esc(champ.runner_up.name)} ${esc(champ.score)}</div>
+            ${champ.venue ? `<div class="champ-venue">${esc(champ.venue)}${
+              champ.date ? ' · ' + esc(champ.date) : ''}</div>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="card"><h3>Previous finals</h3>
+        ${rows.slice(1).map(r => `
+          <div class="honour-row">
+            <span class="honour-season">${esc(r.season_label)}</span>
+            <span class="honour-win">${crest(r.winner, 'honour-crest')}
+              <b>${esc(r.winner.short)}</b></span>
+            <span class="honour-score">${esc(r.score)}</span>
+            <span class="honour-lose">${esc(r.runner_up.short)}</span>
+          </div>`).join('')}
+      </div>`;
+  } catch (err) {
+    body.innerHTML = emptyState('⚠', 'Could not load honours', err.message);
+  }
+}
+
 async function ticketsPanel(ctx, lid) {
   const body = $('#lg-body');
   try {
@@ -168,8 +246,7 @@ async function ticketsPanel(ctx, lid) {
       `<div class="tix-grid">${data.clubs.map(c => `
         <a class="tix-card" style="--edge:${esc(c.colour)}"
            href="${esc(c.ticket_url)}" target="_blank" rel="noopener noreferrer">
-          <span class="crest-fb" style="background:${esc(c.colour)};width:34px;height:34px;font-size:11px;border-radius:9px">
-            ${esc(c.short.slice(0, 3).toUpperCase())}</span>
+          ${crest(c, 'tix-crest')}
           <span class="info"><b>${esc(c.name)}</b><small>${esc(c.stadium)}</small></span>
           <span style="color:var(--accent);font-size:15px">🎟</span>
         </a>`).join('')}</div>`;

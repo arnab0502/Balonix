@@ -622,6 +622,64 @@ async def team_fixtures(api_team_id: int, when: str = "next", count: int = 8) ->
     return matches
 
 
+async def final_result(league_api_id: int, season: int) -> dict | None:
+    """Who won a competition in a given season, from its Final fixture."""
+    async def fetch():
+        return await client.get("/fixtures", "core", league=league_api_id,
+                                season=season, round="Final")
+
+    rows = await cache.get_or_set(f"af:final:{league_api_id}:{season}", 2592000, fetch)
+    if not rows:
+        return None
+    raw = rows[0]
+    teams, goals, score = raw.get("teams") or {}, raw.get("goals") or {}, raw.get("score") or {}
+    home, away = teams.get("home") or {}, teams.get("away") or {}
+    pens = score.get("penalty") or {}
+    home_won = bool(home.get("winner"))
+    winner, runner_up = (home, away) if home_won else (away, home)
+
+    def side(t):
+        club = resolve_exact(t.get("name"))
+        return {"id": club["id"] if club else None, "name": t.get("name"),
+                "short": club["short"] if club else t.get("name"),
+                "logo": t.get("logo"),
+                "colour": club["colour"] if club else "#7a8699"}
+
+    # Report the score from the winner's side, otherwise "Real Madrid beat
+    # Dortmund 0-2" reads backwards whenever the winner was the away team.
+    wg, lg_ = ((goals.get("home"), goals.get("away")) if home_won
+               else (goals.get("away"), goals.get("home")))
+    line = f"{wg or 0}-{lg_ or 0}"
+    if pens.get("home") is not None:
+        wp, lp = ((pens["home"], pens["away"]) if home_won
+                  else (pens["away"], pens["home"]))
+        line += f" ({wp}-{lp} pens)"
+    return {
+        "season": season,
+        "season_label": f"{season}/{str(season + 1)[-2:]}",
+        "date": (raw.get("fixture") or {}).get("date", "")[:10],
+        "venue": ((raw.get("fixture") or {}).get("venue") or {}).get("name"),
+        "winner": side(winner),
+        "runner_up": side(runner_up),
+        "score": line,
+        "on_penalties": pens.get("home") is not None,
+        "fixture_id": str((raw.get("fixture") or {}).get("id") or ""),
+    }
+
+
+async def honours(league_api_id: int, seasons: list[int]) -> list[dict]:
+    """Roll of honour, most recent first. One call per season, cached a month."""
+    out = []
+    for season in seasons:
+        try:
+            row = await final_result(league_api_id, season)
+        except Exception:
+            continue
+        if row:
+            out.append(row)
+    return out
+
+
 async def team_info(api_team_id: int) -> dict:
     """Team identity, including whether it is a national side.
 
@@ -718,6 +776,7 @@ async def player_stats(player_id: int, season: int) -> list[dict]:
         rating = games.get("rating")
         out.append({
             "league": league.get("name"),
+            "league_api_id": league.get("id"),
             "league_logo": league.get("logo"),
             "country": league.get("country"),
             "team": team.get("name"),
@@ -735,6 +794,50 @@ async def player_stats(player_id: int, season: int) -> list[dict]:
         })
     out.sort(key=lambda s: (-s["apps"], s["league"] or ""))
     return out
+
+
+async def player_seasons(player_id: int) -> list[int]:
+    """Every season API-Football holds data for, newest first."""
+    async def fetch():
+        return await client.get("/players/seasons", "core", player=player_id)
+
+    rows = await cache.get_or_set(f"af:pseasons:{player_id}", settings.ttl_squads, fetch)
+    return sorted({int(y) for y in rows if str(y).isdigit()}, reverse=True)
+
+
+async def topassists(league_api_id: int, season: int) -> list[dict]:
+    async def fetch():
+        return await client.get("/players/topassists", "core",
+                                league=league_api_id, season=season)
+
+    rows = await cache.get_or_set(
+        f"af:assists:{league_api_id}:{season}", settings.ttl_standings, fetch)
+    out = []
+    for i, entry in enumerate(rows, 1):
+        p = entry.get("player") or {}
+        stats = (entry.get("statistics") or [{}])[0]
+        goals = stats.get("goals") or {}
+        out.append({"rank": i, "player_id": p.get("id"), "player": p.get("name"),
+                    "assists": goals.get("assists") or 0,
+                    "goals": goals.get("total") or 0})
+    return out
+
+
+async def league_fixtures(league_api_id: int, season: int, when: str = "next",
+                          count: int = 20) -> list[dict]:
+    """A competition's own fixture list, next or last."""
+    param = "next" if when == "next" else "last"
+    ttl = 1800 if when == "next" else settings.ttl_fixtures
+
+    async def fetch():
+        return await client.get("/fixtures", "core", league=league_api_id,
+                                season=season, **{param: count}, timezone="UTC")
+
+    rows = await cache.get_or_set(
+        f"af:lgfx:{league_api_id}:{season}:{param}:{count}", ttl, fetch)
+    matches = [_match(r) for r in rows]
+    matches.sort(key=lambda m: m["kickoff"] or "", reverse=(when == "last"))
+    return matches
 
 
 async def player_transfers(player_id: int) -> list[dict]:

@@ -1,6 +1,6 @@
 // Router + app shell.
 import { api } from './api.js';
-import { $, $$, esc, installCrestFallback } from './util.js';
+import { $, $$, crest, esc, installCrestFallback } from './util.js';
 import { renderHome } from './views/home.js';
 import { renderRumours } from './views/rumours.js';
 import { renderMatches, renderLive, stopPolling } from './views/matches.js';
@@ -159,8 +159,7 @@ function wireSearch() {
           bits.push('<div class="sr-group">Clubs</div>');
           bits.push(...r.teams.map(t =>
             `<div class="sr-item" data-go="#/team/${esc(t.id)}">
-               <span class="crest-fb" style="background:${esc(t.colour)}">${esc(t.tla)}</span>
-               ${esc(t.name)}<small>${esc(t.stadium)}</small></div>`));
+               ${crest(t)}${esc(t.name)}<small>${esc(t.stadium)}</small></div>`));
         }
         if (r.players?.length) {
           bits.push('<div class="sr-group">Players</div>');

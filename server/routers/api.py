@@ -11,6 +11,7 @@ from ..data.clubs import CLUB_BY_ID, CLUBS, CLUBS_BY_LEAGUE
 from ..data.leagues import LEAGUES, LEAGUE_BY_ID
 from ..data.tickets import ticket_link
 from ..providers import build_provider
+from ..providers.composite import TEAM_IDS
 from ..providers import apifootball as af
 from ..providers import youtube as yt
 from ..providers import news
@@ -20,12 +21,18 @@ router = APIRouter(prefix="/api")
 provider = build_provider()
 
 
+def _with_logo(club: dict) -> dict:
+    """Attach the club's crest so every view can show a real badge."""
+    api = TEAM_IDS.get(club["id"])
+    return {**club, "logo": api.get("logo") if api else None}
+
+
 @router.get("/meta")
 async def meta():
     lo, hi = af.free_window()
     return {
         "leagues": LEAGUES,
-        "clubs": CLUBS,
+        "clubs": [_with_logo(c) for c in CLUBS],
         "provider": provider.name,
         "live": settings.is_live,
         "quota": quota.snapshot(),
@@ -179,6 +186,30 @@ async def scorers(league_id: str):
     return data
 
 
+@router.get("/league/{league_id}/honours")
+async def honours(league_id: str, count: int = Query(8, ge=1, le=15)):
+    if league_id not in LEAGUE_BY_ID:
+        raise HTTPException(404, "unknown league")
+    if not hasattr(provider, "honours"):
+        return {"honours": [], "source": "unavailable"}
+    data = await provider.honours(league_id, count)
+    data["league"] = LEAGUE_BY_ID[league_id]
+    return data
+
+
+@router.get("/league/{league_id}/fixtures")
+async def league_fixtures(league_id: str,
+                          when: str = Query("next", pattern="^(next|last)$"),
+                          count: int = Query(20, ge=1, le=50)):
+    if league_id not in LEAGUE_BY_ID:
+        raise HTTPException(404, "unknown league")
+    if not hasattr(provider, "league_fixtures"):
+        return {"matches": [], "source": "unavailable"}
+    data = await provider.league_fixtures(league_id, when, count)
+    data["league"] = LEAGUE_BY_ID[league_id]
+    return data
+
+
 @router.get("/transfers")
 async def transfers(
     league: str | None = None,
@@ -267,7 +298,7 @@ async def tickets(club_id: str):
     if not club:
         raise HTTPException(404, "unknown club")
     return {
-        "club": club,
+        "club": _with_logo(club),
         "ticket": ticket_link(club["name"], club["league"], venue=club["stadium"]),
     }
 
@@ -278,8 +309,9 @@ async def all_tickets(league: str | None = None):
     return {
         "clubs": [
             {"id": c["id"], "name": c["name"], "short": c["short"],
-             "league": c["league"], "stadium": c["stadium"], "colour": c["colour"],
-             "ticket_url": c["ticket_url"]}
+             "tla": c["tla"], "league": c["league"], "stadium": c["stadium"],
+             "colour": c["colour"], "ticket_url": c["ticket_url"],
+             "logo": (TEAM_IDS.get(c["id"]) or {}).get("logo")}
             for c in clubs
         ]
     }

@@ -299,6 +299,16 @@ class CompositeProvider:
         return {"table": rows, "source": "simulated", "simulated": True,
                 "note": "Live standings unavailable - showing the simulated season."}
 
+    async def honours(self, league_id: str, count: int = 8) -> dict:
+        """Recent winners of a competition."""
+        meta = LEAGUE_BY_ID.get(league_id)
+        if not meta or not settings.is_live:
+            return {"honours": [], "source": "unavailable"}
+        latest = current_season()
+        seasons = [latest - i for i in range(1, count + 1)]
+        rows = await af.honours(meta["api_id"], seasons)
+        return {"honours": rows, "source": "apifootball", "simulated": False}
+
     async def scorers(self, league_id: str) -> dict:
         meta = LEAGUE_BY_ID[league_id]
         if settings.is_live:
@@ -667,6 +677,7 @@ class CompositeProvider:
         rated = [s["rating"] for s in stats if s["rating"]]
         totals["rating"] = round(sum(rated) / len(rated), 2) if rated else None
 
+        history = await self._career_by_competition(pid)
         return {
             "profile": profile,
             "current_club": club,
@@ -674,10 +685,108 @@ class CompositeProvider:
             "stats": stats,
             "totals": totals,
             "career": career,
+            "competitions": history["competitions"],
+            "seasons_covered": history["seasons"],
+            "rankings": await self._league_rankings(pid, history["latest_by_league"]),
             "transfers": transfers[:20],
             "source": "apifootball",
             "simulated": False,
         }
+
+    async def _career_by_competition(self, pid: int, max_seasons: int = 10) -> dict:
+        """Season-by-season stats, grouped by competition.
+
+        One upstream call per season, cached for a week, capped so a 15-season
+        career does not cost 15 calls every time the page opens.
+        """
+        try:
+            seasons = (await af.player_seasons(pid))[:max_seasons]
+        except Exception:
+            return {"competitions": [], "seasons": [], "latest_by_league": {}}
+
+        buckets: dict[str, dict] = {}
+        latest_by_league: dict[int, int] = {}
+        for season in seasons:
+            try:
+                rows = await af.player_stats(pid, season)
+            except Exception:
+                continue
+            for row in rows:
+                name = row.get("league") or "Unknown"
+                b = buckets.setdefault(name, {
+                    "competition": name, "logo": row.get("league_logo"),
+                    "country": row.get("country"), "seasons": [],
+                    "apps": 0, "goals": 0, "assists": 0, "minutes": 0,
+                    "yellow": 0, "red": 0, "_ratings": [],
+                })
+                b["seasons"].append({**row, "season": season,
+                                     "season_label": _season_label(season)})
+                for k in ("apps", "goals", "assists", "minutes", "yellow", "red"):
+                    b[k] += row.get(k) or 0
+                if row.get("rating"):
+                    b["_ratings"].append(row["rating"])
+                api_id = row.get("league_api_id")
+                if api_id and season > latest_by_league.get(api_id, 0):
+                    latest_by_league[api_id] = season
+
+        out = []
+        for b in buckets.values():
+            ratings = b.pop("_ratings")
+            b["rating"] = round(sum(ratings) / len(ratings), 2) if ratings else None
+            b["seasons"].sort(key=lambda r: r["season"], reverse=True)
+            b["span"] = (f"{b['seasons'][-1]['season_label']} – {b['seasons'][0]['season_label']}"
+                         if len(b["seasons"]) > 1 else b["seasons"][0]["season_label"])
+            out.append(b)
+        out.sort(key=lambda b: (-b["apps"], b["competition"]))
+        return {"competitions": out, "seasons": seasons,
+                "latest_by_league": latest_by_league}
+
+    async def _league_rankings(self, pid: int, latest_by_league: dict) -> list[dict]:
+        """Where the player sits on a competition's leaderboards.
+
+        Ranked against the published top-20 charts, so a player outside them
+        simply has no rank - we do not invent one.
+        """
+        out = []
+        for api_id, season in list(latest_by_league.items())[:6]:
+            meta = next((lg for lg in LEAGUES if lg["api_id"] == api_id), None)
+            if not meta:
+                continue
+            entry = {"league": meta["short"], "league_id": meta["id"],
+                     "accent": meta["accent"], "season": _season_label(season)}
+            try:
+                scorers = await af.topscorers(api_id, season)
+                hit = next((r for r in scorers if r["player_id"] == pid), None)
+                if hit:
+                    entry["goals_rank"] = hit["rank"]
+                    entry["goals"] = hit["goals"]
+                    entry["of"] = len(scorers)
+            except Exception:
+                pass
+            try:
+                assists = await af.topassists(api_id, season)
+                hit = next((r for r in assists if r["player_id"] == pid), None)
+                if hit:
+                    entry["assists_rank"] = hit["rank"]
+                    entry["assists"] = hit["assists"]
+                    entry["of"] = entry.get("of") or len(assists)
+            except Exception:
+                pass
+            if entry.get("goals_rank") or entry.get("assists_rank"):
+                out.append(entry)
+        return out
+
+    async def league_fixtures(self, league_id: str, when: str = "next",
+                              count: int = 20) -> dict:
+        meta = LEAGUE_BY_ID.get(league_id)
+        if not meta or not settings.is_live:
+            return {"matches": [], "source": "unavailable"}
+        season = current_season()
+        rows = await af.league_fixtures(meta["api_id"], season, when, count)
+        if not rows and when == "next":
+            rows = await af.league_fixtures(meta["api_id"], season - 1, when, count)
+        return {"matches": _tag(rows, "apifootball", False),
+                "source": "apifootball", "simulated": False, "when": when}
 
 
 def window_start(window: str = "season") -> str:

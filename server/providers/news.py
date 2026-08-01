@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 import httpx
@@ -53,6 +53,13 @@ _TRANSFER_WORDS = re.compile(
     r"joins?|exit|departure|replace|snap up|eye(?:ing|s)?|pursue|chase)\b",
     re.I,
 )
+
+
+# Evergreen promos that sit in news feeds forever and are not stories.
+_JUNK = re.compile(
+    r"^(sign up for|subscribe|newsletter|get the|download the|"
+    r"live[:,]? |follow live|as it happened|clockwatch|"
+    r"quiz[:,]|the fiver|weekly wrap)", re.I)
 
 
 def _strip_html(text: str) -> str:
@@ -109,6 +116,8 @@ def _parse(xml: str, feed: dict) -> list[dict]:
             "{http://purl.org/rss/1.0/modules/content/}encoded"))
 
         blob = f"{title} {summary}"
+        if _JUNK.search(title):
+            continue
         if not feed["rumour_only"] and not _TRANSFER_WORDS.search(blob):
             continue
 
@@ -155,16 +164,27 @@ def _clubs_mentioned(text: str) -> list[dict]:
     return list(found.values())[:4]
 
 
+class FeedError(RuntimeError):
+    pass
+
+
 async def _fetch_feed(feed: dict) -> list[dict]:
     async def fetch():
         async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=6.0),
                                      headers=_UA, follow_redirects=True) as c:
             r = await c.get(feed["url"])
+            # Raise rather than return empty: the cache serves the last good
+            # copy on failure, so a blip does not blank a source for 15 minutes.
             if r.status_code != 200:
-                return ""
+                raise FeedError(f"{feed['id']} returned HTTP {r.status_code}")
+            if "<" not in r.text[:200]:
+                raise FeedError(f"{feed['id']} did not return XML")
             return r.text
 
-    xml = await cache.get_or_set(f"news:{feed['id']}", settings.ttl_rumours, fetch)
+    try:
+        xml = await cache.get_or_set(f"news:{feed['id']}", settings.ttl_rumours, fetch)
+    except Exception:
+        return []
     return _parse(xml, feed) if xml else []
 
 
@@ -197,6 +217,8 @@ async def rumours(source: str | None = None, club: str | None = None,
         rows.extend(res)
 
     rows = _dedupe(rows)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+    rows = [r for r in rows if not r["published"] or r["published"] >= cutoff]
     if club:
         rows = [r for r in rows if any(c["id"] == club for c in r["clubs"])]
     rows.sort(key=lambda r: r["published"] or "", reverse=True)
