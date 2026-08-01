@@ -182,18 +182,22 @@ function lineupsPanel(m) {
   const hasReal = l && (l.home || l.away);
 
   if (!hasReal) {
-    // Nothing published yet - offer the probable XI for both sides instead of
-    // an empty tab. Loaded lazily, since it is several upstream calls.
+    // Nothing published yet. Probable XI needs a season/transfer history to
+    // rank off, which only exists for the tracked registry - offering the
+    // button for a fixture between two untracked clubs (a Champions League
+    // qualifier between minnows, say) would just dead-end on click.
+    const canPredict = [m.home, m.away].some(s => s && !String(s.id).startsWith('api-'));
     return un + `
       <div class="card">
         <h3>Lineups not published yet</h3>
         <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:12px">
-          Clubs release teamsheets about an hour before kick-off. Until then,
-          here is the probable XI for each side.
+          Clubs release teamsheets about an hour before kick-off.${canPredict
+            ? ' Until then, here is the probable XI for each side.'
+            : ''}
         </p>
-        <button class="btn" id="xi-load">Show probable XI</button>
+        ${canPredict ? '<button class="btn" id="xi-load">Show probable XI</button>' : ''}
       </div>
-      <div id="xi-slot"></div>`;
+      ${canPredict ? '<div id="xi-slot"></div>' : ''}`;
   }
 
   return un + ['home', 'away'].filter(k => l[k]).map(k => {
