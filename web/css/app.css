@@ -1063,7 +1063,13 @@ a.sq-card:hover { background: var(--surface-3); }
   text-transform: uppercase; color: var(--muted); margin-left: 4px; }
 .xi-num { font-family: var(--mono); font-size: 10px; background: var(--surface-3);
   color: var(--text-2); border-radius: 20px; padding: 1px 7px; margin-left: 4px; }
-.bench-chip.out { color: var(--muted); text-decoration: line-through; opacity: .75; }
+.xi-legend { float: right; font-size: 9.5px; letter-spacing: .06em;
+  color: var(--accent); text-transform: none; font-weight: 600; }
+/* Unavailable squad members: still in the squad, so no strikethrough - just
+   dimmed with the reason shown. */
+.bench-chip.out { color: var(--muted); opacity: .7; border-color: rgba(255,71,71,.28); }
+.bench-chip.out i { font-style: normal; font-size: 9px; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--live); margin-left: 4px; }
 .bench-chip b { font-family: var(--mono); color: var(--muted); font-weight: 600;
   margin-right: 5px; }
 .xi-caveat { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.5; }

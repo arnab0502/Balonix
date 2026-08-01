@@ -848,8 +848,33 @@ class CompositeProvider:
             })
         arrivals.sort(key=lambda a: (a.get("signed") or ""), reverse=True)
 
-        bench = [{**p, "new_signing": p["id"] in new_ids}
-                 for p in players if p["id"] not in picked and p["id"] not in injured][:12]
+        # The rest of the squad - a plain roster listing, not a predicted
+        # bench. Guessing who sits on the bench adds nothing the XI does not
+        # already say, so everyone outside the XI is simply listed, with
+        # injured players flagged inline rather than split into their own
+        # bucket. That keeps the arithmetic honest: XI + rest == squad size.
+        rest = [{**p,
+                 "new_signing": p["id"] in new_ids,
+                 "in_squad": True,
+                 "unavailable": injured[p["id"]].get("reason") if p["id"] in injured else None}
+                for p in players if p["id"] not in picked]
+
+        # A signing with no roster entry (an unregistered returning loanee)
+        # still belongs in the squad list, flagged, rather than vanishing.
+        seen = picked | {p["id"] for p in rest}
+        for pid, t in arrivals_by_id.items():
+            if pid in seen:
+                continue
+            rest.append({
+                "id": pid, "name": t["player"].get("name"),
+                "photo": t["player"].get("logo"), "position": None,
+                "starts": 0, "apps": 0, "minutes": 0, "rating": None,
+                "goals": 0, "assists": 0, "unavailable": None,
+                "new_signing": True, "in_squad": False,
+                "from_club": t["from"].get("name"),
+            })
+
+        rest.sort(key=lambda p: (-(p.get("starts") or 0), -(p.get("minutes") or 0)))
 
         return {
             "available": True,
@@ -859,8 +884,9 @@ class CompositeProvider:
             "formation": formation,
             "formation_usage": used[:3],
             "xi": xi,
-            "bench": bench,
-            "unavailable": list(injured.values()),
+            "squad": rest,
+            "squad_total": len(xi) + len(rest),
+            "unavailable_count": sum(1 for p in rest if p.get("unavailable")),
             "new_signings": len(new_ids),
             "arrivals": arrivals,
             "basis": ("most-used shape and recent XI" if shape

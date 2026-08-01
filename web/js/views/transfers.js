@@ -243,29 +243,19 @@ function pitchBlock(d) {
       statLabel: 'number shown is starts last season',
     })}
 
-    ${d.arrivals?.length ? `<div class="xi-sub">
-      <h4>Arrivals this window <span class="xi-num">${d.arrivals.length}</span></h4>
-      <div class="bench-list">${d.arrivals.map(p => `
-        <a class="bench-chip is-new${p.in_squad === false ? ' unreg' : ''}"
+    ${d.squad?.length ? `<div class="xi-sub">
+      <h4>Rest of squad <span class="xi-num">${d.squad.length}</span>
+        <span class="xi-legend">${d.xi.length} in XI · ${d.squad_total} total${
+          d.new_signings ? ` · ★ ${d.new_signings} signed` : ''}</span></h4>
+      <div class="bench-list">${d.squad.map(p => `
+        <a class="bench-chip ${p.new_signing ? 'is-new' : ''}${
+             p.in_squad === false ? ' unreg' : ''}${p.unavailable ? ' out' : ''}"
            href="#/player/${esc(p.id)}"
-           title="${p.in_squad === false
-             ? 'Signed, but not yet in the registered squad'
-             : esc(p.name || '')}">★ ${esc(p.name)}${
-          p.from_club ? ` · ${esc(p.from_club)}` : ''}${
-          p.in_squad === false ? ' <i>unregistered</i>' : ''}</a>`).join('')}</div>
-    </div>` : ''}
-
-    ${d.bench?.length ? `<div class="xi-sub">
-      <h4>Bench and squad</h4>
-      <div class="bench-list">${d.bench.map(p => `
-        <a class="bench-chip ${p.new_signing ? 'is-new' : ''}" href="#/player/${esc(p.id)}">
-          <b>${p.starts ?? 0}</b>${esc(p.name)}</a>`).join('')}</div>
-    </div>` : ''}
-
-    ${d.unavailable?.length ? `<div class="xi-sub">
-      <h4>Unavailable${d.unavailable[0].as_of ? ` (as of ${esc(d.unavailable[0].as_of)})` : ''}</h4>
-      <div class="bench-list">${d.unavailable.map(p => `
-        <span class="bench-chip out">${esc(p.name)}${p.reason ? ` · ${esc(p.reason)}` : ''}</span>`).join('')}</div>
+           title="${p.unavailable ? esc(p.unavailable)
+             : p.in_squad === false ? 'Signed, but not yet in the registered squad'
+             : esc(p.name || '')}">${p.new_signing ? '★ ' : ''}<b>${p.starts ?? 0}</b>${esc(p.name)}${
+          p.in_squad === false ? ' <i>unregistered</i>'
+          : p.unavailable ? ` <i>${esc(p.unavailable)}</i>` : ''}</a>`).join('')}</div>
     </div>` : ''}
 
     <p class="xi-caveat">Derived from the club's most-used shape, its most recent
