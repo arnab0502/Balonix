@@ -141,6 +141,7 @@ function clubCard(c) {
         ${column('In', c.in, 'in')}
         ${column('Out', c.out, 'out')}
       </div>
+      <div class="club-xi" hidden data-xi="${esc(c.club.id)}"></div>
     </section>`;
 }
 
@@ -172,9 +173,85 @@ function wireAccordions(root) {
   root.querySelectorAll('.club-head').forEach(h =>
     h.addEventListener('click', () => {
       const body = h.nextElementSibling;
-      body.hidden = !body.hidden;
-      h.classList.toggle('open', !body.hidden);
+      const xi = body.nextElementSibling;
+      const opening = body.hidden;
+      body.hidden = !opening;
+      if (xi) xi.hidden = !opening;
+      h.classList.toggle('open', opening);
+      // Fetch the XI only when a card is actually opened - nobody wants 110
+      // lineup requests fired on page load.
+      if (opening && xi && !xi.dataset.loaded) loadXI(xi);
     }));
+}
+
+async function loadXI(slot) {
+  slot.dataset.loaded = '1';
+  slot.innerHTML = `<div class="xi-loading">Working out the probable XI…</div>`;
+  try {
+    const d = await api.lineup(slot.dataset.xi);
+    slot.innerHTML = d.available ? pitchBlock(d)
+      : `<div class="xi-loading">${esc(d.reason || 'No lineup data')}</div>`;
+  } catch (err) {
+    slot.innerHTML = `<div class="xi-loading">Could not build a lineup — ${esc(err.message)}</div>`;
+  }
+}
+
+/* ------------------------------------------------------ probable XI */
+function pitchBlock(d) {
+  const rows = new Map();
+  for (const p of d.xi) {
+    const [r, col] = String(p.grid || '1:1').split(':').map(Number);
+    if (!rows.has(r)) rows.set(r, []);
+    rows.get(r).push({ ...p, col: col || 0 });
+  }
+  const lines = [...rows.entries()].sort((a, b) => a[0] - b[0])
+    .map(([, line]) => line.sort((a, b) => a.col - b.col));
+
+  return `
+    <div class="xi-head">
+      <b>Probable XI</b>
+      <span class="xi-form">${esc(d.formation || '')}</span>
+      <span class="xi-note">${esc(d.season)} data · ${esc(d.basis)}</span>
+    </div>
+    <div class="pitch xi-pitch"><div class="pitch-half">
+      ${lines.map(line => `
+        <div class="p-line">${line.map(p => `
+          <a class="p-man ${p.new_signing ? 'is-new' : ''}"
+             href="#/player/${esc(p.id)}" title="${esc(p.name)} — ${p.starts} starts${
+               p.replaces ? ', in for ' + esc(p.replaces) : ''}">
+            <span class="p-shirt" style="background:${esc(d.club.colour)}">${
+              p.new_signing ? '★' : (p.starts ?? '')}</span>
+            <span class="p-name">${esc(lastName(p.name))}</span>
+            ${p.replaces ? `<span class="p-rep">for ${esc(lastName(p.replaces))}</span>` : ''}
+          </a>`).join('')}</div>`).join('')}
+    </div></div>
+
+    ${d.arrivals?.length ? `<div class="xi-sub">
+      <h4>New arrivals, no minutes yet</h4>
+      <div class="bench-list">${d.arrivals.map(p => `
+        <a class="bench-chip is-new" href="#/player/${esc(p.id)}">★ ${esc(p.name)}</a>`).join('')}</div>
+    </div>` : ''}
+
+    ${d.bench?.length ? `<div class="xi-sub">
+      <h4>Bench and squad</h4>
+      <div class="bench-list">${d.bench.map(p => `
+        <a class="bench-chip ${p.new_signing ? 'is-new' : ''}" href="#/player/${esc(p.id)}">
+          <b>${p.starts ?? 0}</b>${esc(p.name)}</a>`).join('')}</div>
+    </div>` : ''}
+
+    ${d.unavailable?.length ? `<div class="xi-sub">
+      <h4>Unavailable${d.unavailable[0].as_of ? ` (as of ${esc(d.unavailable[0].as_of)})` : ''}</h4>
+      <div class="bench-list">${d.unavailable.map(p => `
+        <span class="bench-chip out">${esc(p.name)}${p.reason ? ` · ${esc(p.reason)}` : ''}</span>`).join('')}</div>
+    </div>` : ''}
+
+    <p class="xi-caveat">Derived from the club's most-used shape, its most recent
+      XI and who actually starts — not an official teamsheet.</p>`;
+}
+
+function lastName(name = '') {
+  const parts = String(name).trim().split(' ');
+  return parts.length > 1 ? parts[parts.length - 1] : name;
 }
 
 /* ----------------------------------------------------------------- latest */

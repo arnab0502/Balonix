@@ -250,6 +250,16 @@ async def team(team_id: str):
     return data
 
 
+@router.get("/team/{team_id}/lineup")
+async def team_lineup(team_id: str):
+    """Probable XI after the window - derived, clearly not a teamsheet."""
+    if team_id not in CLUB_BY_ID:
+        raise HTTPException(404, "unknown club")
+    if not hasattr(provider, "probable_xi"):
+        return {"available": False, "reason": "needs a live provider"}
+    return await provider.probable_xi(team_id)
+
+
 @router.get("/player/{player_id}")
 async def player(player_id: str):
     if not hasattr(provider, "player"):

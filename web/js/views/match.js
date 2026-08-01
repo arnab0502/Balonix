@@ -230,34 +230,76 @@ function lastName(name = '') {
 function h2hPanel(m) {
   const rows = m.h2h || [];
   if (!rows.length) return emptyState('🔁', 'No previous meetings on record');
-  const s = m.h2h_summary;
-  const homeName = m.home.short, awayName = m.away.short;
+  const s = m.h2h_summary || {};
+  const home = m.home, away = m.away;
+  const played = s.played || 0;
+  const pct = n => played ? (n / played) * 100 : 0;
 
-  const summary = s && s.played ? `
-    <div class="card">
-      <h3>Last ${s.played} meetings</h3>
-      <div class="h2h-bar">
-        <span class="h2h-seg win"  style="flex:${s.won  || 0.001}">${s.won}</span>
-        <span class="h2h-seg draw" style="flex:${s.drew || 0.001}">${s.drew}</span>
-        <span class="h2h-seg loss" style="flex:${s.lost || 0.001}">${s.lost}</span>
+  // Goals per meeting, so the two clubs can be compared at a glance.
+  const gf = s.gf || 0, ga = s.ga || 0, goals = gf + ga || 1;
+
+  return `
+    <div class="card h2h-card">
+      <div class="h2h-top">
+        <div class="h2h-team">${crest(home)}<b>${esc(home.short)}</b></div>
+        <div class="h2h-count">${played}<span>meetings</span></div>
+        <div class="h2h-team away"><b>${esc(away.short)}</b>${crest(away)}</div>
+      </div>
+
+      <div class="h2h-split">
+        <span class="h2h-n win">${s.won || 0}</span>
+        <div class="h2h-bar">
+          <i class="win"  style="width:${pct(s.won || 0)}%"></i>
+          <i class="draw" style="width:${pct(s.drew || 0)}%"></i>
+          <i class="loss" style="width:${pct(s.lost || 0)}%"></i>
+        </div>
+        <span class="h2h-n loss">${s.lost || 0}</span>
       </div>
       <div class="h2h-key">
-        <span>${esc(homeName)} wins</span><span>Draws</span><span>${esc(awayName)} wins</span>
+        <span>${esc(home.short)} wins</span>
+        <span>${s.drew || 0} drawn</span>
+        <span>${esc(away.short)} wins</span>
       </div>
-      <div class="kv" style="margin-top:10px"><span>Goals</span>
-        <b>${s.gf} : ${s.ga}</b></div>
-    </div>` : '';
 
-  return summary + `<div class="card"><h3>Previous meetings</h3>
-    ${rows.map(r => {
-      const done = (r.status || {}).type === 'finished';
-      return `<div class="kv h2h-row" data-match="${esc(r.id)}">
-        <span>${esc(shortDate(r.kickoff))} · ${esc(r.home.short)} v ${esc(r.away.short)}
-          <br><small style="color:var(--muted)">${esc(r.league_name || '')}</small></span>
-        <b>${done ? `${r.home.score}\u2013${r.away.score}` : esc(r.status.label || '')}</b>
-      </div>`;
-    }).join('')}
-  </div>`;
+      <div class="h2h-metric">
+        <div class="h2h-mrow">
+          <b>${gf}</b><span class="lbl">Goals scored</span><b>${ga}</b>
+        </div>
+        <div class="stat-bar">
+          <i class="h" style="width:${(gf / goals) * 100}%"></i>
+          <i class="a" style="width:${(ga / goals) * 100}%"></i>
+        </div>
+        <div class="h2h-mrow sub">
+          <b>${played ? (gf / played).toFixed(1) : '0.0'}</b>
+          <span class="lbl">per meeting</span>
+          <b>${played ? (ga / played).toFixed(1) : '0.0'}</b>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Every meeting</h3>
+      <div class="h2h-list">
+        ${rows.map(r => {
+          const done = (r.status || {}).type === 'finished';
+          const hs = r.home.score, as = r.away.score;
+          // Orient the result to this fixture's home side.
+          const isHome = r.home.id === home.id;
+          const mine = isHome ? hs : as, theirs = isHome ? as : hs;
+          const res = !done ? '' : mine > theirs ? 'W' : mine === theirs ? 'D' : 'L';
+          return `<a class="h2h-row" href="#/match/${esc(r.id)}">
+            <span class="h2h-res ${res}">${res || '–'}</span>
+            <span class="h2h-when">${esc(shortDate(r.kickoff))}</span>
+            <span class="h2h-fix">
+              <span class="${isHome ? 'strong' : ''}">${esc(r.home.short)}</span>
+              <b>${done ? `${hs}–${as}` : esc((r.status || {}).label || '')}</b>
+              <span class="${isHome ? '' : 'strong'}">${esc(r.away.short)}</span>
+            </span>
+            <span class="h2h-comp">${esc(r.league_name || '')}</span>
+          </a>`;
+        }).join('')}
+      </div>
+    </div>`;
 }
 
 /* ---------------------------------------------------------------- ratings */

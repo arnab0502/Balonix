@@ -557,6 +557,139 @@ class CompositeProvider:
             data["transfers_source"] = "simulated"
         return data
 
+    # ------------------------------------------------------------ probable XI
+    async def probable_xi(self, team_id: str) -> dict:
+        """A likely starting XI, grounded in who actually starts.
+
+        Built from four real signals rather than a guess: the club's most-used
+        formation, the grid slots of its most recent XI in that shape, how
+        often each player has started, and who is currently unavailable.
+        Explicitly labelled probable - it is not a published teamsheet.
+        """
+        club = CLUB_BY_ID.get(team_id)
+        api = TEAM_IDS.get(team_id)
+        if not club or not api or not settings.is_live:
+            return {"available": False, "reason": "no data for this club"}
+
+        api_id = api["api_id"]
+        meta = LEAGUE_BY_ID[club["league"]]
+        season, _ = await self._season(club["league"])
+
+        players = await af.team_season_players(api_id, season)
+        if not players:
+            return {"available": False, "reason": "no squad data for this season"}
+
+        stats = await af.team_statistics(api_id, meta["api_id"], season)
+        used = [l for l in (stats.get("lineups") or []) if l.get("formation")]
+        used.sort(key=lambda l: -(l.get("played") or 0))
+        formation = used[0]["formation"] if used else None
+
+        shape = await af.recent_lineup_shape(api_id, season, formation)
+        try:
+            injured = {p["id"]: p for p in await af.team_injuries(api_id, season)}
+        except Exception:
+            injured = {}
+
+        by_id = {p["id"]: p for p in players}
+        pools: dict[str, list] = {"G": [], "D": [], "M": [], "F": []}
+        for p in players:
+            if p["id"] in injured:
+                continue
+            pools.get(_pos_bucket(p["position"]), pools["M"]).append(p)
+
+        # New arrivals since the window opened, so they can be badged.
+        entry = self._transfers.load().get("clubs", {}).get(team_id) or {}
+        since = window_start("season")
+        new_ids = {t["player"].get("id") for t in entry.get("rows", [])
+                   if t.get("date", "") >= since and t["to"].get("id") == team_id}
+
+        picked: set[int] = set()
+
+        def take(bucket: str, fallback: bool = True):
+            """Best available player for a position band, by starts."""
+            for cand in pools.get(bucket, []):
+                if cand["id"] not in picked:
+                    picked.add(cand["id"])
+                    return cand
+            if not fallback:
+                return None
+            # Position dry (every forward injured, say) - take the best of
+            # whoever is left rather than leaving a hole in the XI.
+            for other in ("F", "M", "D", "G"):
+                for cand in pools.get(other, []):
+                    if cand["id"] not in picked:
+                        picked.add(cand["id"])
+                        return cand
+            return None
+
+        xi: list[dict] = []
+        if shape and shape.get("slots"):
+            slots = shape["slots"]
+            # Pass 1: everyone who held a slot and is still available keeps
+            # THEIR OWN slot. Doing this greedily in one pass let the highest
+            # starter grab the first vacant slot, which put Shaw at right-back
+            # and pushed Bruno Fernandes out of the team entirely.
+            assigned: dict[int, dict] = {}
+            for i, slot in enumerate(slots):
+                prev = by_id.get(slot.get("id"))
+                if prev and prev["id"] not in injured and prev["id"] not in picked:
+                    picked.add(prev["id"])
+                    assigned[i] = {**prev, "basis": "held", "replaces": None}
+
+            # Pass 2: fill what is left, position band by position band.
+            for i, slot in enumerate(slots):
+                if i in assigned:
+                    continue
+                bucket = _pos_bucket(slot.get("pos"))
+                pick = take(bucket)
+                if not pick:
+                    continue
+                prev = by_id.get(slot.get("id"))
+                assigned[i] = {**pick, "basis": "promoted",
+                               "replaces": (prev or {}).get("name") or slot.get("name")}
+
+            for i, slot in enumerate(slots):
+                pick = assigned.get(i)
+                if not pick:
+                    continue
+                xi.append({**pick, "grid": slot.get("grid"),
+                           "slot_pos": slot.get("pos"),
+                           "new_signing": pick["id"] in new_ids})
+            formation = shape.get("formation") or formation
+        else:
+            for bucket, n in (("G", 1), ("D", 4), ("M", 4), ("F", 2)):
+                for _ in range(n):
+                    pick = take(bucket)
+                    if pick:
+                        xi.append({**pick, "grid": None, "slot_pos": bucket,
+                                   "basis": "starts", "replaces": None,
+                                   "new_signing": pick["id"] in new_ids})
+
+        # Signings with no minutes for this club yet cannot be ranked on
+        # starts, so surface them separately instead of guessing.
+        arrivals = [{**by_id[pid], "new_signing": True}
+                    for pid in new_ids
+                    if pid in by_id and by_id[pid]["starts"] == 0][:8]
+
+        bench = [{**p, "new_signing": p["id"] in new_ids}
+                 for p in players if p["id"] not in picked and p["id"] not in injured][:12]
+
+        return {
+            "available": True,
+            "club": {"id": team_id, "name": club["name"], "short": club["short"],
+                     "colour": club["colour"], "logo": api.get("logo")},
+            "season": _season_label(season),
+            "formation": formation,
+            "formation_usage": used[:3],
+            "xi": xi,
+            "bench": bench,
+            "unavailable": list(injured.values()),
+            "new_signings": len(new_ids),
+            "arrivals": arrivals,
+            "basis": ("most-used shape and recent XI" if shape
+                      else "appearances only - no recent lineup published"),
+        }
+
     async def search(self, query: str) -> dict:
         q = _fold(query)
         if not q:
@@ -845,6 +978,14 @@ def _h2h_summary(rows: list[dict], home_api_id: int | None) -> dict:
             lost += 1
     return {"played": won + drew + lost, "won": won, "drew": drew,
             "lost": lost, "gf": gf, "ga": ga}
+
+
+def _pos_bucket(pos: str | None) -> str:
+    """API-Football gives only G/D/M/F (or the long form)."""
+    if not pos:
+        return "M"
+    first = pos.strip()[0].upper()
+    return first if first in ("G", "D", "M", "F") else "M"
 
 
 def _season_label(year: int) -> str:

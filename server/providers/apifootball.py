@@ -680,6 +680,138 @@ async def honours(league_api_id: int, seasons: list[int]) -> list[dict]:
     return out
 
 
+async def team_season_players(api_team_id: int, season: int) -> list[dict]:
+    """Every player's season record for a club, including how often they
+    actually started. `games.lineups` is the signal a probable XI needs."""
+    async def fetch():
+        rows, page = [], 1
+        while page <= 5:
+            batch = await client.get("/players", "core", team=api_team_id,
+                                     season=season, page=page)
+            rows.extend(batch)
+            if len(batch) < 20:
+                break
+            page += 1
+        return rows
+
+    raw = await cache.get_or_set(f"af:teamplayers:{api_team_id}:{season}",
+                                 settings.ttl_standings, fetch)
+    out: list[dict] = []
+    for entry in raw:
+        p = entry.get("player") or {}
+        best = None
+        for st in entry.get("statistics") or []:
+            games = st.get("games") or {}
+            starts = games.get("lineups") or 0
+            if best is None or starts > best["starts"]:
+                goals = st.get("goals") or {}
+                rating = games.get("rating")
+                best = {
+                    "starts": starts,
+                    "apps": games.get("appearences") or 0,
+                    "minutes": games.get("minutes") or 0,
+                    "position": games.get("position"),
+                    "rating": round(float(rating), 2) if rating else None,
+                    "goals": goals.get("total") or 0,
+                    "assists": goals.get("assists") or 0,
+                }
+        if not best:
+            continue
+        out.append({"id": p.get("id"), "name": p.get("name"),
+                    "photo": p.get("photo"), "age": p.get("age"), **best})
+    out.sort(key=lambda r: (-r["starts"], -r["minutes"]))
+    return out
+
+
+async def team_statistics(api_team_id: int, league_api_id: int, season: int) -> dict:
+    async def fetch():
+        return await client.get("/teams/statistics", "core", team=api_team_id,
+                                league=league_api_id, season=season)
+
+    raw = await cache.get_or_set(
+        f"af:teamstats:{api_team_id}:{league_api_id}:{season}",
+        settings.ttl_standings, fetch)
+    if isinstance(raw, list):
+        raw = raw[0] if raw else {}
+    return raw or {}
+
+
+async def recent_lineup_shape(api_team_id: int, season: int,
+                              formation: str | None, count: int = 6) -> dict | None:
+    """The club's most recent real XI in a given formation.
+
+    Used as the template for a probable XI: it supplies genuine grid slots
+    ("2:4" = second row, fourth across), which the squad data cannot.
+    """
+    async def fetch():
+        fixtures = await client.get("/fixtures", "core", team=api_team_id,
+                                    season=season, last=count)
+        shapes = []
+        for fx in fixtures:
+            fid = (fx.get("fixture") or {}).get("id")
+            if not fid:
+                continue
+            blocks = await client.get("/fixtures/lineups", "core", fixture=fid)
+            for b in blocks:
+                if (b.get("team") or {}).get("id") != api_team_id:
+                    continue
+                shapes.append({
+                    "formation": b.get("formation"),
+                    "date": (fx.get("fixture") or {}).get("date", ""),
+                    "slots": [
+                        {"grid": (p.get("player") or {}).get("grid"),
+                         "pos": (p.get("player") or {}).get("pos"),
+                         "id": (p.get("player") or {}).get("id"),
+                         "name": (p.get("player") or {}).get("name")}
+                        for p in b.get("startXI") or []
+                    ],
+                })
+        return shapes
+
+    shapes = await cache.get_or_set(f"af:shapes:{api_team_id}:{season}:{count}",
+                                    settings.ttl_standings, fetch)
+    if not shapes:
+        return None
+    if formation:
+        match = next((s for s in shapes if s["formation"] == formation), None)
+        if match:
+            return match
+    return shapes[0]
+
+
+async def team_injuries(api_team_id: int, season: int) -> list[dict]:
+    """Who was unavailable for the club's MOST RECENT fixture.
+
+    `/injuries?team=&season=` returns every injury record of the whole season,
+    so taking it wholesale marks players unavailable who were fit again months
+    ago - it wiped Bruno Fernandes and Casemiro out of a probable XI. Records
+    carry the fixture they relate to, so we keep only the latest matchday.
+    """
+    async def fetch():
+        return await client.get("/injuries", "core", team=api_team_id, season=season)
+
+    rows = await cache.get_or_set(f"af:teaminj:{api_team_id}:{season}", 3600, fetch)
+    if not rows:
+        return []
+
+    latest = max(((r.get("fixture") or {}).get("date") or "") for r in rows)
+    if not latest:
+        return []
+
+    seen, out = set(), []
+    for r in rows:
+        if ((r.get("fixture") or {}).get("date") or "") != latest:
+            continue
+        p = r.get("player") or {}
+        if not p.get("id") or p["id"] in seen:
+            continue
+        seen.add(p["id"])
+        out.append({"id": p.get("id"), "name": p.get("name"),
+                    "reason": p.get("reason"), "type": p.get("type"),
+                    "as_of": latest[:10]})
+    return out
+
+
 async def team_info(api_team_id: int) -> dict:
     """Team identity, including whether it is a national side.
 

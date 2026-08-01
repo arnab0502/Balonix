@@ -48,6 +48,7 @@ export const api = {
                 req(`/squads/sync${limit ? `?limit=${limit}` : ''}`, { method: 'POST' }),
   team:       id => req(`/team/${encodeURIComponent(id)}`, { ttl: 300000 }),
   player:     id => req(`/player/${encodeURIComponent(id)}`, { ttl: 300000 }),
+  lineup:     id => req(`/team/${encodeURIComponent(id)}/lineup`, { ttl: 900000 }),
   search:     q => req(`/search?q=${encodeURIComponent(q)}`, { ttl: 120000 }),
   tickets:    lg => req(`/tickets${lg ? `?league=${lg}` : ''}`, { ttl: 600000 }),
   videos:     (full = false) => req(`/videos${full ? '?full=1' : ''}`, { ttl: 300000 }),
