@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e0c">
+<title>TotalFootball</title>
+<link rel="preconnect" href="https://media.api-sports.io">
+<link rel="stylesheet" href="/static/css/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9917;</text></svg>">
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ---------------- left rail (desktop) ---------------- -->
+  <aside class="rail" id="rail">
+    <a class="brand" href="#/matches">
+      <span class="brand-mark">TF</span>
+      <span class="brand-word">Total<em>Football</em></span>
+    </a>
+
+    <nav class="rail-nav" id="rail-nav"></nav>
+
+    <div class="rail-section">
+      <h4>Competitions</h4>
+      <div id="rail-leagues"></div>
+    </div>
+
+    <div class="rail-foot">
+      <div class="quota" id="quota-widget"></div>
+    </div>
+  </aside>
+
+  <!-- ---------------- main ---------------- -->
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn only-mobile" id="mobile-menu" aria-label="Menu">&#9776;</button>
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="Search clubs, players, competitions&hellip;"
+               autocomplete="off" spellcheck="false">
+        <div class="search-results" id="search-results" hidden></div>
+      </div>
+      <div class="topbar-right">
+        <span class="src-pill" id="src-pill" hidden></span>
+      </div>
+    </header>
+
+    <div id="view" class="view"></div>
+  </main>
+</div>
+
+<nav class="tabbar" id="tabbar"></nav>
+<div class="scrim" id="scrim" hidden></div>
+
+<script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
