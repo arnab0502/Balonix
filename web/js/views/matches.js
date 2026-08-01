@@ -97,10 +97,6 @@ export async function renderMatches(ctx, params) {
             </div>
             ${rows.map(matchRow).join('')}
           </section>`;
-      } else if (data.elsewhere?.length) {
-        slot.innerHTML = notice(
-          `No big-five matches in play right now — <b>${data.elsewhere.length}</b> live elsewhere in the world.
-           <a href="#/live" style="color:var(--accent);font-weight:700">See them →</a>`, 'info');
       } else {
         slot.innerHTML = '';
       }
@@ -141,16 +137,16 @@ export async function renderMatches(ctx, params) {
 export async function renderLive(ctx) {
   const root = $('#view');
   root.innerHTML = `
-    <div class="page-head"><h1>Live worldwide</h1>
-      <span class="sub">Every match in play right now, all competitions</span></div>
+    <div class="page-head"><h1>Live now</h1>
+      <span class="sub">Every match in play across the competitions we cover</span></div>
     <div id="all-live">${skeleton(8)}</div>`;
   try {
-    const data = await api.live('all');
+    const data = await api.live('big5');
     const rows = data.matches || [];
     ctx.setPill(sourcePill(data));
     $('#all-live').innerHTML = rows.length
       ? leagueBlocks(rows, ctx.leagueMeta)
-      : emptyState('😴', 'Nothing in play', 'Not a single match kicking anywhere.');
+      : emptyState('😴', 'Nothing in play', 'No matches kicking off right now.');
   } catch (err) {
     $('#all-live').innerHTML = emptyState('⚠', 'Could not load live matches', err.message);
   }

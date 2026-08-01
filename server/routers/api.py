@@ -113,7 +113,6 @@ async def home():
     return {
         "live": live[:6],
         "live_count": len(live),
-        "elsewhere_count": len(live_data.get("elsewhere") or []),
         "upcoming": upcoming[:6],
         "upcoming_day": upcoming_day,
         "results": results,

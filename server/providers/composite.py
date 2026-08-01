@@ -194,11 +194,6 @@ class CompositeProvider:
                        "source": "apifootball", "simulated": False,
                        "scope": scope,
                        "poll_seconds": quota.suggested_poll_seconds()}
-            if not rows and scope == "big5":
-                other = await af.live_matches(covered_only=False)
-                payload["elsewhere"] = _tag(other[:40], "apifootball", False)
-                payload["note"] = ("No big-five matches in play. "
-                                   f"{len(other)} live worldwide.")
             return payload
         except QuotaExceeded:
             stale = cache.peek_stale("af:live")
