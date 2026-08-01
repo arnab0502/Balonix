@@ -16,6 +16,10 @@ export async function renderLeague(ctx, params) {
   const meta = ctx.leagueMeta[lid];
   const root = $('#view');
 
+  // Roll of honour is who won the final - meaningless for leagues where the
+  // title just goes to whoever tops the table, so only continental cups get it.
+  const hasHonours = !!meta?.continental;
+
   root.innerHTML = `
     <div class="page-head">
       <h1>${esc(meta?.name || lid)}</h1>
@@ -25,7 +29,7 @@ export async function renderLeague(ctx, params) {
       <div class="tab active" data-tab="table">Table</div>
       <div class="tab" data-tab="fixtures">Fixtures</div>
       <div class="tab" data-tab="scorers">Top scorers</div>
-      <div class="tab" data-tab="honours">Roll of honour</div>
+      ${hasHonours ? '<div class="tab" data-tab="honours">Roll of honour</div>' : ''}
       <div class="tab" data-tab="tickets">Ticket directory</div>
     </div>
     <div id="lg-body">${skeleton(8)}</div>`;
@@ -35,9 +39,9 @@ export async function renderLeague(ctx, params) {
     table: () => tablePanel(ctx, lid),
     fixtures: () => fixturesPanel(ctx, lid),
     scorers: () => scorersPanel(ctx, lid),
-    honours: () => honoursPanel(ctx, lid),
     tickets: () => ticketsPanel(ctx, lid),
   };
+  if (hasHonours) panels.honours = () => honoursPanel(ctx, lid);
   panels.table();
 
   $('#lg-tabs').addEventListener('click', e => {
