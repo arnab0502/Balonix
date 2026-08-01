@@ -53,6 +53,17 @@ def _slug(text: str | None) -> str:
     return "".join(ch.lower() for ch in text if ch.isalnum())
 
 
+def _club_key(side: dict) -> str:
+    """A stable identity for a transfer's club side.
+
+    Prefer the already-resolved registry id over slugging the raw name: two
+    records for the same real move sometimes spell a club differently
+    ("Manchester United" vs "Manchester Utd"), which would otherwise slug to
+    two different keys and defeat de-duplication entirely.
+    """
+    return side.get("id") or f"~{_slug(side.get('name'))}"
+
+
 def _fold(text: str | None) -> str:
     """Accent-insensitive lowercase, keeping spaces (for search matching)."""
     if not text:
@@ -458,14 +469,43 @@ class CompositeProvider:
             for row in entry.get("rows", []):
                 if not row.get("date") or row["date"] < cutoff:
                     continue
+                # Upstream occasionally reports a club transferring a player
+                # to itself (literally, or via two spellings that resolve to
+                # the same registry id, e.g. "East Bengal 2" / "East Bengal
+                # II"). Not a real transfer - drop it before it can land in
+                # both a club's In and Out columns for the same non-event.
+                if _club_key(row["from"]) == _club_key(row["to"]):
+                    continue
                 key = (_slug(row["player"].get("name")),
-                       _slug(row["from"].get("name")),
-                       _slug(row["to"].get("name")))
+                       _club_key(row["from"]), _club_key(row["to"]))
                 prev = best.get(key)
                 if prev is None or (row["fee"]["amount"], row["date"]) > \
                         (prev["fee"]["amount"], prev["date"]):
                     best[key] = row
-        rows = [t for t in best.values() if t["from"]["league"] or t["to"]["league"]]
+
+        # API-Football sometimes reports the same real move with the two legs
+        # swapped - e.g. "Napoli -> Man Utd" one day and "Man Utd -> Napoli"
+        # the next, or a fringe loan out to a non-registry club reported once
+        # each direction - which the key above does not catch, since from/to
+        # are reversed. Left alone, a player shows up in both a club's In and
+        # Out columns for what is really one event. Collapse same-player
+        # moves between the same pair of counterparties down to whichever
+        # telling is most recent.
+        #
+        # _club_key falls back to a slugged name when a club has no registry
+        # id (most non-big-five/ISL counterparties), so this still collapses
+        # correctly as long as that name is spelled the same both times -
+        # true for the vast majority of cases, since it is the same upstream
+        # record either way.
+        by_pair: dict[tuple, dict] = {}
+        for row in best.values():
+            pair = frozenset({_club_key(row["from"]), _club_key(row["to"])})
+            key = (_slug(row["player"].get("name")), pair)
+            prev = by_pair.get(key)
+            if prev is None or row["date"] > prev["date"]:
+                by_pair[key] = row
+
+        rows = [t for t in by_pair.values() if t["from"]["league"] or t["to"]["league"]]
         rows.sort(key=lambda t: (t["date"], t["fee"]["amount"]), reverse=True)
         return rows
 
@@ -585,14 +625,18 @@ class CompositeProvider:
 
         stats_here = {p["id"]: p for p in await af.team_season_players(api_id, season)}
 
-        # Who arrived this window, and where from.
-        tstore = self._transfers.load().get("clubs", {}).get(team_id) or {}
+        # Who arrived this window, and where from. Reads the deduplicated,
+        # swap-collapsed list (see _build_merged) rather than this club's raw
+        # sweep rows - a player whose Man Utd record was reported both as an
+        # arrival and a departure (a known upstream data glitch) would
+        # otherwise count as a signing here even after their latest real event
+        # was actually leaving.
         since = window_start("season")
-        arrivals_by_id: dict[int, dict] = {}
-        for t in tstore.get("rows", []):
-            pid = t["player"].get("id")
-            if pid and t.get("date", "") >= since and t["to"].get("id") == team_id:
-                arrivals_by_id.setdefault(pid, t)
+        arrivals_by_id: dict[int, dict] = {
+            t["player"]["id"]: t
+            for t in self._merged_transfers(since)
+            if t["player"].get("id") and t["to"].get("id") == team_id
+        }
 
         players: list[dict] = []
         for r in roster:

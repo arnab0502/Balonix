@@ -29,13 +29,13 @@ export async function renderTransfers(ctx, params) {
 
     <div class="filters" id="lg-filters">
       <button class="chip ${!state.league ? 'active' : ''}" data-lg="">All leagues</button>
-      ${ctx.leagues.map(l => `
+      ${ctx.leagues.filter(l => !l.continental).map(l => `
         <button class="chip ${state.league === l.id ? 'active' : ''}" data-lg="${esc(l.id)}">
           <span class="dot" style="background:${esc(l.accent)}"></span>${esc(l.short)}
         </button>`).join('')}
     </div>
     <div class="filters" id="kind-filters">
-      ${[['', 'All types'], ['transfer', 'Permanent'], ['loan', 'Loans'], ['free', 'Free agents']]
+      ${[['', 'All types'], ['transfer', 'Permanent'], ['loan', 'Loans']]
         .map(([k, label]) => `
           <button class="chip ${state.kind === k ? 'active' : ''}" data-kind="${k}">${label}</button>`).join('')}
     </div>
@@ -79,7 +79,15 @@ async function load(ctx) {
     ctx.setPill(sourcePill(data));
     renderCoverage(ctx, data);
 
-    const filterKind = rows => state.kind ? rows.filter(t => t.fee.kind === state.kind) : rows;
+    // Free transfers count as permanent moves, not their own category - a
+    // free is still a permanent departure/arrival, just with no fee attached.
+    const filterKind = rows => {
+      if (!state.kind) return rows;
+      if (state.kind === 'transfer') {
+        return rows.filter(t => t.fee.kind === 'transfer' || t.fee.kind === 'free');
+      }
+      return rows.filter(t => t.fee.kind === state.kind);
+    };
 
     if (state.group === 'club' && data.clubs?.length) {
       const clubs = data.clubs
@@ -115,9 +123,10 @@ function clubCard(c) {
   // Fees are almost never published for recent windows (see README), so the
   // headline is deal mix, not spend. Money is shown only when it exists.
   const all = [...c.in, ...c.out];
-  const perm = all.filter(t => t.fee.kind === 'transfer').length;
+  // Free transfers are permanent moves with no fee, not a category of their
+  // own - counted alongside paid permanent deals.
+  const perm = all.filter(t => t.fee.kind === 'transfer' || t.fee.kind === 'free').length;
   const loan = all.filter(t => t.fee.kind === 'loan').length;
-  const free = all.filter(t => t.fee.kind === 'free').length;
   const net = c.net;
   const hasMoney = c.spent || c.received;
 
@@ -132,7 +141,6 @@ function clubCard(c) {
         <span class="ch-mix">
           ${perm ? `<i class="mx transfer">${perm} perm</i>` : ''}
           ${loan ? `<i class="mx loan">${loan} loan</i>` : ''}
-          ${free ? `<i class="mx free">${free} free</i>` : ''}
         </span>
         ${hasMoney ? `<span class="ch-net ${net > 0 ? 'pos' : 'neg'}">
           ${net > 0 ? '+' : '−'}${money(Math.abs(net))}<small>net</small></span>` : ''}
