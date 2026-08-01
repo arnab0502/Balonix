@@ -34,8 +34,15 @@ FEEDS: list[dict] = [
      "url": "https://feeds.bbci.co.uk/sport/football/gossip/rss.xml"},
     {"id": "guardian-transfers", "name": "Guardian Transfers", "tier": 1, "rumour_only": True,
      "url": "https://www.theguardian.com/football/transfer-window/rss"},
+    # Sky's transfer centre - a dedicated desk, like BBC Gossip.
+    {"id": "sky-transfers", "name": "Sky Transfers", "tier": 1, "rumour_only": True,
+     "url": "https://www.skysports.com/rss/12691"},
+    # Feed 12040 is Sky's ALL-SPORT wire: cricket, racing, golf, netball and
+    # boxing outnumbered football roughly four to one, and headlines like
+    # "Root: I won't rip up Bazball blueprint" slipped through the transfer
+    # keyword filter. 11095 is football-only.
     {"id": "sky", "name": "Sky Sports", "tier": 1, "rumour_only": False,
-     "url": "https://www.skysports.com/rss/12040"},
+     "url": "https://www.skysports.com/rss/11095"},
     {"id": "bbc", "name": "BBC Sport", "tier": 1, "rumour_only": False,
      "url": "https://feeds.bbci.co.uk/sport/football/rss.xml"},
     {"id": "guardian", "name": "Guardian", "tier": 1, "rumour_only": False,
@@ -60,6 +67,38 @@ _JUNK = re.compile(
     r"^(sign up for|subscribe|newsletter|get the|download the|"
     r"live[:,]? |follow live|as it happened|clockwatch|"
     r"quiz[:,]|the fiver|weekly wrap)", re.I)
+
+# Backstop for other sports. The feeds are football-specific, but publishers
+# reorganise them without warning - Sky's wire silently carried cricket,
+# racing, golf and netball. Cheap to check, and stops a whole sport leaking in
+# if a URL changes meaning.
+_OTHER_SPORT = re.compile(
+    r"\b(cricket|bazball|the ashes|wicket|batsman|batting|bowler|innings|odi|"
+    r"rugby|six nations|scrum|try line|super league|hull kr|wigan warriors|"
+    r"nfl|super bowl|nba|baseball|ice hockey|"
+    r"tennis|wimbledon|us open|atp|wta|"
+    r"golf|the masters|ryder cup|pga|birdie|"
+    r"formula one|formula 1|grand prix|verstappen|"
+    r"boxing|heavyweight|ufc|mma|"
+    r"netball|darts|snooker|horse racing|steeplechase|"
+    r"olympic|commonwealth games|athletics|cycling|tour de france)\b", re.I)
+
+# Words that can look like another sport but are ordinary football language.
+_FOOTBALL_SAFE = re.compile(
+    r"\b(football|soccer|premier league|la liga|serie a|bundesliga|ligue 1|"
+    r"champions league|europa|fifa|uefa|efl|transfer|striker|midfielder|"
+    r"defender|goalkeeper|manager|head coach)\b", re.I)
+
+
+def _is_other_sport(text: str) -> bool:
+    """True when a story is clearly about a different sport.
+
+    Explicit football vocabulary wins: a piece on a footballer who also played
+    county cricket, or "the Ashes of this rivalry", should not be dropped.
+    """
+    if not _OTHER_SPORT.search(text):
+        return False
+    return not _FOOTBALL_SAFE.search(text)
 
 
 def _strip_html(text: str) -> str:
@@ -118,7 +157,7 @@ def _parse(xml: str, feed: dict) -> list[dict]:
         blob = f"{title} {summary}"
         if _JUNK.search(title):
             continue
-        if not feed["rumour_only"] and not _TRANSFER_WORDS.search(blob):
+        if _is_other_sport(blob):
             continue
 
         image = None
@@ -139,6 +178,9 @@ def _parse(xml: str, feed: dict) -> list[dict]:
             "source_id": feed["id"],
             "tier": feed["tier"],
             "desk": feed["rumour_only"],   # a dedicated transfer desk, not general news
+            # A dedicated transfer desk is transfer business by definition;
+            # anything else has to earn it on the keywords.
+            "is_transfer": bool(feed["rumour_only"] or _TRANSFER_WORDS.search(blob)),
             "image": image,
             "clubs": _clubs_mentioned(blob),
         })
@@ -230,7 +272,7 @@ def _dedupe(rows: list[dict]) -> list[dict]:
 
 
 async def rumours(source: str | None = None, club: str | None = None,
-                  limit: int = 80) -> dict:
+                  limit: int = 80, kind: str | None = None) -> dict:
     import asyncio
 
     feeds = [f for f in FEEDS if not source or f["id"] == source]
@@ -245,6 +287,11 @@ async def rumours(source: str | None = None, club: str | None = None,
         rows.extend(res)
 
     rows = _dedupe(rows)
+    if kind == "transfers":
+        rows = [r for r in rows if r.get("is_transfer")]
+    elif kind == "news":
+        # General football news only - the transfer desks live on their own tab.
+        rows = [r for r in rows if not r.get("is_transfer")]
     cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
     rows = [r for r in rows if not r["published"] or r["published"] >= cutoff]
     if club:

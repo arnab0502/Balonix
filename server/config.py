@@ -79,6 +79,12 @@ class Settings:
     ttl_squads: int = _int("TF_TTL_SQUADS", 604800)
     ttl_videos: int = _int("TF_TTL_VIDEOS", 1800)
     ttl_rumours: int = _int("TF_TTL_RUMOURS", 900)
+    ttl_socials: int = _int("TF_TTL_SOCIALS", 900)
+
+    # Nitter mirrors X timelines as RSS without a key. Instances come and go,
+    # so this is a fallback list tried in order.
+    nitter_hosts: str = os.environ.get(
+        "TF_NITTER_HOSTS", "https://nitter.net,https://nitter.privacydev.net").strip()
 
     host: str = os.environ.get("TF_HOST", "127.0.0.1")
     port: int = _int("TF_PORT", 0) or _int("PORT", 8000)

@@ -19,7 +19,7 @@ const NAV = [
   { id: 'matches',   href: '#/matches',   icon: '⚽', label: 'Matches' },
   { id: 'live',      href: '#/live',      icon: '🔴', label: 'Live' },
   { id: 'transfers', href: '#/transfers', icon: '🔄', label: 'Transfers' },
-  { id: 'rumours',   href: '#/rumours',   icon: '🗞', label: 'Rumours' },
+  { id: 'rumours',   href: '#/rumours',   icon: '🔥', label: 'Football Hot' },
   { id: 'tickets',   href: '#/tickets',   icon: '🎟', label: 'Tickets' },
   { id: 'podcast',   href: '#/podcast',   icon: '🎙', label: 'Podcast' },
 ];

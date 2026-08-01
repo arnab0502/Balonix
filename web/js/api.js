@@ -22,11 +22,18 @@ async function req(path, { fresh = false, ttl = 30000, method = 'GET' } = {}) {
 export const api = {
   meta:       () => req('/meta', { ttl: 300000 }),
   home:       () => req('/home', { ttl: 120000 }),
-  rumours:    ({ source, club, limit = 120 } = {}) => {
+  rumours:    ({ source, club, kind, limit = 150 } = {}) => {
                 const p = new URLSearchParams({ limit });
                 if (source) p.set('source', source);
                 if (club) p.set('club', club);
+                if (kind) p.set('kind', kind);
                 return req(`/rumours?${p}`, { ttl: 300000 });
+              },
+  socials:    ({ handle, beat, limit = 200 } = {}) => {
+                const p = new URLSearchParams({ limit });
+                if (handle) p.set('handle', handle);
+                if (beat) p.set('beat', beat);
+                return req(`/socials?${p}`, { ttl: 300000 });
               },
   matches:    day => req(`/matches?day=${day}`, { ttl: 60000 }),
   live:       (scope = 'big5', fresh = true) => req(`/live?scope=${scope}`, { fresh, ttl: 20000 }),

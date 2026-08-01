@@ -15,6 +15,7 @@ from ..providers.composite import TEAM_IDS
 from ..providers import apifootball as af
 from ..providers import youtube as yt
 from ..providers import news
+from ..providers import socials
 from ..quota import quota
 
 router = APIRouter(prefix="/api")
@@ -272,11 +273,22 @@ async def player(player_id: str):
 
 @router.get("/rumours")
 async def rumours(source: str | None = None, club: str | None = None,
-                  limit: int = Query(80, ge=1, le=200)):
-    """Transfer talk aggregated from football news desks (RSS, no API key)."""
+                  limit: int = Query(80, ge=1, le=200),
+                  kind: str | None = Query(None, pattern="^(news|transfers)$")):
+    """Football news and transfer talk from news desks (RSS, no API key)."""
     if source and source not in news.FEED_BY_ID:
         raise HTTPException(404, "unknown source")
-    return await news.rumours(source=source, club=club, limit=limit)
+    return await news.rumours(source=source, club=club, limit=limit, kind=kind)
+
+
+@router.get("/socials")
+async def social_posts(handle: str | None = None,
+                  beat: str | None = Query(None, pattern="^(transfers|news|stats)$"),
+                  limit: int = Query(100, ge=1, le=250)):
+    """Posts from top football accounts, read through Nitter (no API key)."""
+    if handle and handle.lower() not in socials.ACCOUNT_BY_HANDLE:
+        raise HTTPException(404, "unknown account")
+    return await socials.posts(handle=handle, beat=beat, limit=limit)
 
 
 @router.get("/videos")

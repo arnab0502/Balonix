@@ -1259,6 +1259,40 @@ a.sq-card:hover { background: var(--surface-3); }
   .pt-stat { font-size: 8.5px; }
 }
 
+
+/* ---------- social posts ---------- */
+.sp-card {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 13px 15px; margin-bottom: 8px;
+  transition: background .13s, border-color .13s, transform .13s;
+}
+.sp-card:hover { background: var(--surface-2); border-color: var(--line-2);
+  transform: translateX(2px); }
+.sp-avatar {
+  width: 34px; height: 34px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; font-size: 11px; font-weight: 800;
+  background: linear-gradient(150deg, var(--surface-3), var(--surface-2));
+  border: 1px solid var(--line-2); color: var(--text-2);
+}
+.sp-body { flex: 1; min-width: 0; }
+.sp-top { display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  margin-bottom: 4px; font-size: 12px; }
+.sp-top b { font-size: 13px; }
+.sp-handle { color: var(--muted); }
+.sp-rt { font-size: 9.5px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--muted);
+  background: var(--surface-3); border-radius: 20px; padding: 1px 7px; }
+.sp-when { margin-left: auto; color: var(--muted); font-size: 11px; }
+.sp-text { font-size: 13.5px; line-height: 1.5; color: var(--text);
+  white-space: pre-wrap; word-break: break-word; }
+.sp-card:hover .sp-text { color: var(--text); }
+
+@media (max-width: 560px) {
+  .sp-avatar { width: 28px; height: 28px; font-size: 10px; }
+  .sp-when { margin-left: 0; }
+}
+
 /* ==========================================================================
    Mobile
    ========================================================================== */

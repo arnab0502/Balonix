@@ -86,7 +86,7 @@ function hero(d) {
         <p class="hero-sub">Scores, tables, transfers and the rumour mill across
           six competitions — plus every episode we record.</p>
         <div class="hero-actions">
-          <a class="btn" href="#/rumours">Rumour mill →</a>
+          <a class="btn" href="#/rumours">Football Hot →</a>
           <a class="btn ghost" href="#/transfers">Transfers</a>
         </div>
       </div>
@@ -118,7 +118,7 @@ function panel(title, href, linkText, body, extra = '') {
 function rumourPanel(d) {
   const rows = d.rumours || [];
   if (!rows.length) return '';
-  return panel('Rumour mill', '#/rumours', 'All rumours',
+  return panel('Football Hot', '#/rumours?tab=transfers', 'See all',
     `<div class="hr-list">${rows.map(r => `
       <a class="hr-item" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">
         <span class="hr-dot" style="--c:${r.tier === 1 ? '#c8ff2e' : '#7a8699'}"></span>
