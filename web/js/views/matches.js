@@ -49,8 +49,25 @@ function dateStrip(active) {
     </div>`;
 }
 
+/** Land on today if it has anything on, otherwise the nearest day that does -
+ *  no point opening on an empty "no matches" page when the season's quiet. */
+async function defaultMatchDay() {
+  const today = isoDay(0);
+  try {
+    const todayData = await api.matches(today);
+    if ((todayData.matches || []).length) return today;
+  } catch { /* fall through */ }
+  try {
+    const home = await api.home();
+    if (home.upcoming_day) return home.upcoming_day;
+    const resultDay = (home.results || [])[0]?.kickoff?.slice(0, 10);
+    if (resultDay) return resultDay;
+  } catch { /* fall through */ }
+  return today;
+}
+
 export async function renderMatches(ctx, params) {
-  const day = params.day || isoDay(0);
+  const day = params.day || await defaultMatchDay();
   const root = $('#view');
 
   root.innerHTML = `
