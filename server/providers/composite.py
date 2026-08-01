@@ -924,64 +924,6 @@ class CompositeProvider:
                       else "appearances only - no recent lineup published"),
         }
 
-    async def probable_xi_generic(self, api_id: int) -> dict:
-        """Same idea as probable_xi(), scaled down for a club outside the
-        tracked registry: there is no local season, no synced squad snapshot
-        and no transfer sweep to rank signings against, so this leans on the
-        two things the API can give for any club - the current squad and its
-        most recently published starting XI."""
-        if not settings.is_live:
-            return {"available": False, "reason": "no data for this club"}
-
-        info = await af.team_info(api_id)
-        if not info.get("name"):
-            return {"available": False, "reason": "unknown club"}
-
-        roster = await af.squad(api_id)
-        if not roster:
-            return {"available": False, "reason": "no squad data for this club"}
-
-        shape = await af.recent_lineup_shape(api_id, None, None, count=6)
-        by_id = {p["id"]: p for p in roster if p.get("id")}
-
-        xi: list[dict] = []
-        picked: set[int] = set()
-        if shape and shape.get("slots"):
-            for slot in shape["slots"]:
-                pid = slot.get("id")
-                base = by_id.get(pid, {})
-                xi.append({
-                    "id": pid, "name": base.get("name") or slot.get("name"),
-                    "photo": base.get("photo"), "position": base.get("position"),
-                    "number": base.get("number"),
-                    "grid": slot.get("grid"), "slot_pos": slot.get("pos"),
-                    "starts": None, "basis": "recent lineup",
-                    "replaces": None, "new_signing": False,
-                })
-                if pid:
-                    picked.add(pid)
-
-        rest = [{**p, "starts": None, "new_signing": False, "in_squad": True,
-                 "unavailable": None}
-                for p in roster if p.get("id") not in picked]
-
-        return {
-            "available": True,
-            "club": {"id": f"api-{api_id}", "name": info["name"], "short": info["name"],
-                     "colour": "#7a8699", "logo": info.get("logo")},
-            "season": None,
-            "formation": shape.get("formation") if shape else None,
-            "formation_usage": [],
-            "xi": xi,
-            "squad": rest,
-            "squad_total": len(xi) + len(rest),
-            "unavailable_count": 0,
-            "new_signings": 0,
-            "arrivals": [],
-            "basis": ("most recently published lineup" if shape
-                      else "squad list only - no recent lineup published"),
-        }
-
     async def search(self, query: str) -> dict:
         q = _fold(query)
         if not q:

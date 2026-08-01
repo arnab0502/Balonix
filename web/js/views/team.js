@@ -63,7 +63,7 @@ export async function renderTeam(ctx, params) {
     <div class="tabs" id="tm-tabs">
       <div class="tab active" data-tab="results">Results</div>
       <div class="tab" data-tab="squad">Squad</div>
-      <div class="tab" data-tab="xi">Probable XI</div>
+      ${d.generic ? '' : '<div class="tab" data-tab="xi">Probable XI</div>'}
       ${d.generic ? '' : '<div class="tab" data-tab="transfers">Transfers</div>'}
     </div>
     <div id="tm-body"></div>`;

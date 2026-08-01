@@ -269,12 +269,12 @@ async def team(team_id: str):
 
 @router.get("/team/{team_id}/lineup")
 async def team_lineup(team_id: str):
-    """Probable XI after the window - derived, clearly not a teamsheet."""
-    api_id = _generic_api_id(team_id)
-    if api_id is not None:
-        if not hasattr(provider, "probable_xi_generic"):
-            return {"available": False, "reason": "needs a live provider"}
-        return await provider.probable_xi_generic(api_id)
+    """Probable XI after the window - derived, clearly not a teamsheet.
+
+    Only offered for the tracked registry: for clubs outside it we have no
+    season or transfer data to base a prediction on, so the match page
+    falls back to the club's real, published lineup once it's out instead.
+    """
     if team_id not in CLUB_BY_ID:
         raise HTTPException(404, "unknown club")
     if not hasattr(provider, "probable_xi"):

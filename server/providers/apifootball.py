@@ -761,21 +761,16 @@ async def team_statistics(api_team_id: int, league_api_id: int, season: int) -> 
     return raw or {}
 
 
-async def recent_lineup_shape(api_team_id: int, season: int | None,
+async def recent_lineup_shape(api_team_id: int, season: int,
                               formation: str | None, count: int = 6) -> dict | None:
     """The club's most recent real XI in a given formation.
 
     Used as the template for a probable XI: it supplies genuine grid slots
     ("2:4" = second row, fourth across), which the squad data cannot.
-    `season` is optional - clubs outside the tracked leagues (a Champions
-    League qualifying opponent, say) have no season we know to ask for, so
-    `last=` alone is enough to find their most recent fixtures.
     """
     async def fetch():
-        params = {"team": api_team_id, "last": count}
-        if season:
-            params["season"] = season
-        fixtures = await client.get("/fixtures", "core", **params)
+        fixtures = await client.get("/fixtures", "core", team=api_team_id,
+                                    season=season, last=count)
         shapes = []
         for fx in fixtures:
             fid = (fx.get("fixture") or {}).get("id")

@@ -118,21 +118,22 @@ export function formStrip(form = '') {
 }
 
 /** Probable-XI pitch + rest-of-squad list. Shared by the Transfers club
- *  accordion and the club page, since both hang off the same /lineup call. */
-export function pitchBlock(d) {
-  const tracked = d.season != null;
+ *  accordion, the club page and the match page, since all three hang off
+ *  the same /lineup call. */
+export function pitchBlock(d, opts = {}) {
   return `
     <div class="xi-head">
       <b>Probable XI</b>
-      <span class="xi-note">${tracked ? esc(d.season) + ' data · ' : ''}${esc(d.basis)}</span>
+      <span class="xi-note">${esc(d.season)} data · ${esc(d.basis)}</span>
     </div>
     ${pitch(d.xi, {
       colour: d.club.colour,
       formation: d.formation,
       title: d.club.short,
-      subtitle: tracked ? `${d.new_signings} signings this window` : '',
+      subtitle: `${d.new_signings} signings this window`,
       stat: p => p.starts || null,
-      statLabel: tracked ? 'number shown is starts last season' : '',
+      statLabel: 'number shown is starts last season',
+      flip: opts.flip,
     })}
 
     ${d.squad?.length ? `<div class="xi-sub">
@@ -145,13 +146,11 @@ export function pitchBlock(d) {
            href="#/player/${esc(p.id)}"
            title="${p.unavailable ? esc(p.unavailable)
              : p.in_squad === false ? 'Signed, but not yet in the registered squad'
-             : esc(p.name || '')}">${p.new_signing ? '★ ' : ''}${
-          p.starts != null ? `<b>${p.starts}</b>` : ''}${esc(p.name)}${
+             : esc(p.name || '')}">${p.new_signing ? '★ ' : ''}<b>${p.starts ?? 0}</b>${esc(p.name)}${
           p.in_squad === false ? ' <i>unregistered</i>'
           : p.unavailable ? ` <i>${esc(p.unavailable)}</i>` : ''}</a>`).join('')}</div>
     </div>` : ''}
 
-    <p class="xi-caveat">Derived from the club's ${tracked
-      ? "most-used shape, its most recent XI and who actually starts"
-      : "most recently published starting lineup"} — not an official teamsheet.</p>`;
+    <p class="xi-caveat">Derived from the club's most-used shape, its most recent
+      XI and who actually starts — not an official teamsheet.</p>`;
 }

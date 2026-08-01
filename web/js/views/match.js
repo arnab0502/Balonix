@@ -1,6 +1,6 @@
 // Match detail: hero score, tickets CTA, timeline, stats, lineups, h2h.
 import { api } from '../api.js';
-import { formStrip, sourcePill } from '../components.js';
+import { formStrip, pitchBlock, sourcePill } from '../components.js';
 import { pitch } from '../pitch.js';
 import { api as apiClient } from '../api.js';
 import { $, crest, emptyState, esc, eventIcon, kickoffTime, notice, shortDate, skeleton } from '../util.js';
@@ -232,15 +232,7 @@ export async function loadMatchXI(m, slot, button) {
     const results = await Promise.all(sides.map(s => apiClient.lineup(s.id).catch(() => null)));
     const blocks = results.map((d, i) => {
       if (!d?.available) return '';
-      return `<div class="card">${pitch(d.xi, {
-        colour: d.club.colour,
-        formation: d.formation,
-        title: d.club.short,
-        subtitle: `probable · ${d.new_signings} new`,
-        stat: p => p.starts || null,
-        statLabel: 'number shown is starts last season',
-        flip: i === 1,
-      })}</div>`;
+      return `<div class="card">${pitchBlock(d, { flip: i === 1 })}</div>`;
     }).filter(Boolean).join('');
     slot.innerHTML = blocks || `<div class="card"><p style="color:var(--muted);font-size:13px">
       Could not build a probable XI for this fixture.</p></div>`;
